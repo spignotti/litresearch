@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
     s2_api_key: str | None = None
-    default_model: str = "gpt-4o-mini"
+    default_model: str = "openai/gpt-4o-mini"
+    screening_threshold: int = 40
+    top_n: int = 20
+    max_results_per_query: int = 20
+    pdf_first_pages: int = 4
+    pdf_last_pages: int = 2
+    output_dir: str = "output"
 
     @computed_field
     @property
