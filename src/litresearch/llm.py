@@ -1,4 +1,4 @@
-"""LiteLLM helper functions."""
+"""Thin LiteLLM wrapper for the project's shared call pattern."""
 
 from typing import Any, cast
 
