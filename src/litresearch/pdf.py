@@ -2,7 +2,11 @@
 
 from io import BytesIO
 
+import httpx
 from pypdf import PdfReader
+from rich.console import Console
+
+console = Console()
 
 
 def extract_text(pdf_bytes: bytes, first_pages: int = 4, last_pages: int = 2) -> str:
@@ -32,3 +36,15 @@ def extract_text(pdf_bytes: bytes, first_pages: int = 4, last_pages: int = 2) ->
             parts.append(f"\n--- Page {page_index + 1} ---\n{page_text.strip()}")
 
     return "\n".join(parts).strip()
+
+
+def download_pdf(url: str) -> bytes | None:
+    """Download a PDF and return its bytes on success."""
+    try:
+        response = httpx.get(url, follow_redirects=True, timeout=30.0)
+        response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[yellow]Failed to download PDF:[/yellow] {url} ({exc})")
+        return None
+
+    return response.content
