@@ -1,4 +1,5 @@
 # litresearch
+[![CI](https://github.com/spignotti/litresearch/actions/workflows/ci.yml/badge.svg)](https://github.com/spignotti/litresearch/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/litresearch.svg)](https://pypi.org/project/litresearch/)
 
 CLI tool that automates literature research from research questions to curated,
 ranked, and exported paper sets with structured reports.
