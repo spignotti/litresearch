@@ -1,0 +1,58 @@
+[project]
+name = "litresearch"
+version = "0.1.0"
+description = "CLI tool for automated literature research workflows."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Silas Pignotti", email = "pignottisilas@gmail.com" },
+]
+license = { text = "MIT" }
+dependencies = [
+    "httpx>=0.28.1",
+    "litellm>=1.82.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "pypdf>=6.7.5",
+    "rich>=14.3.3",
+    "semanticscholar>=0.11.0",
+    "typer>=0.24.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/SilasPignotti/litresearch"
+Repository = "https://github.com/SilasPignotti/litresearch"
+
+[project.scripts]
+litresearch = "litresearch.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "nox>=2026.2.9",
+    "pyright>=1.1.408",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.5",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
