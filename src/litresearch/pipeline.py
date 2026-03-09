@@ -12,6 +12,7 @@ from litresearch.stages import analysis, discovery, enrichment, export, query_ge
 
 console = Console()
 
+# Each stage module exposes a shared `run(state, settings)` function.
 STAGES = {
     "query_gen": query_gen.run,
     "discovery": discovery.run,
