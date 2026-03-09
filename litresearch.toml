@@ -1,0 +1,7 @@
+default_model = "openrouter/openai/gpt-4o-mini"
+screening_threshold = 60
+top_n = 5
+max_results_per_query = 5
+pdf_first_pages = 4
+pdf_last_pages = 2
+output_dir = "output-smoke"

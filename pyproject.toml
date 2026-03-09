@@ -30,6 +30,9 @@ litresearch = "litresearch.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/litresearch"]
+
 [dependency-groups]
 dev = [
     "nox>=2026.2.9",
