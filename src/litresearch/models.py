@@ -1,5 +1,7 @@
 """Shared data models for the litresearch pipeline."""
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 
@@ -67,3 +69,14 @@ class PipelineState(BaseModel):
     output_dir: str
     created_at: str
     updated_at: str
+
+    def save(self, path: str | Path) -> None:
+        """Write the pipeline state to disk as JSON."""
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | Path) -> "PipelineState":
+        """Load a pipeline state from a JSON file."""
+        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
