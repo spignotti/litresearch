@@ -25,6 +25,12 @@ def config() -> None:
     """Show basic configuration status without exposing secrets."""
     settings = Settings()
     console.print(f"default_model={settings.default_model}")
+    console.print(f"screening_threshold={settings.screening_threshold}")
+    console.print(f"top_n={settings.top_n}")
+    console.print(f"max_results_per_query={settings.max_results_per_query}")
+    console.print(f"pdf_first_pages={settings.pdf_first_pages}")
+    console.print(f"pdf_last_pages={settings.pdf_last_pages}")
+    console.print(f"output_dir={settings.output_dir}")
     console.print(f"s2_api_key_configured={bool(settings.s2_api_key)}")
     console.print(f"llm_api_key_configured={settings.has_llm_api_key}")
 
