@@ -14,6 +14,26 @@ app = typer.Typer(help="Automated literature research workflow CLI.")
 console = Console()
 
 
+def _build_settings(
+    *,
+    model: str | None = None,
+    top_n: int | None = None,
+    output_dir: str | None = None,
+    threshold: int | None = None,
+) -> Settings:
+    """Load settings and apply CLI overrides."""
+    settings = Settings()
+    if model is not None:
+        settings.default_model = model
+    if top_n is not None:
+        settings.top_n = top_n
+    if output_dir is not None:
+        settings.output_dir = output_dir
+    if threshold is not None:
+        settings.screening_threshold = threshold
+    return settings
+
+
 @app.command()
 def version() -> None:
     """Print the installed version."""
@@ -47,15 +67,12 @@ def run(
     ] = None,
 ) -> None:
     """Run the literature research pipeline."""
-    settings = Settings()
-    if model is not None:
-        settings.default_model = model
-    if top_n is not None:
-        settings.top_n = top_n
-    if output_dir is not None:
-        settings.output_dir = output_dir
-    if threshold is not None:
-        settings.screening_threshold = threshold
+    settings = _build_settings(
+        model=model,
+        top_n=top_n,
+        output_dir=output_dir,
+        threshold=threshold,
+    )
 
     state = run_pipeline(questions, settings)
     console.print(f"[green]Run complete.[/green] Output: {state.output_dir}")
@@ -73,15 +90,12 @@ def resume(
     ] = None,
 ) -> None:
     """Resume the literature research pipeline from saved state."""
-    settings = Settings()
-    if model is not None:
-        settings.default_model = model
-    if top_n is not None:
-        settings.top_n = top_n
-    if output_dir is not None:
-        settings.output_dir = output_dir
-    if threshold is not None:
-        settings.screening_threshold = threshold
+    settings = _build_settings(
+        model=model,
+        top_n=top_n,
+        output_dir=output_dir,
+        threshold=threshold,
+    )
 
     state = run_pipeline([], settings, resume_path=Path(state_file))
     console.print(f"[green]Resume complete.[/green] Output: {state.output_dir}")
