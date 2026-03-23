@@ -3,7 +3,7 @@
 import json
 
 from litresearch.config import Settings
-from litresearch.llm import call_llm
+from litresearch.llm import LLMError, call_llm
 from litresearch.models import Facet, PipelineState, SearchQuery
 from litresearch.prompts import load_prompt
 
@@ -14,7 +14,10 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     user_content = "Research questions:\n" + "\n".join(
         f"- {question}" for question in state.questions
     )
-    response = call_llm(settings, prompt, user_content)
+    try:
+        response = call_llm(settings, prompt, user_content)
+    except LLMError as exc:
+        raise LLMError(f"Query generation failed: {exc}") from exc
     payload = json.loads(response)
 
     facets = [Facet.model_validate(item) for item in payload.get("facets", [])]

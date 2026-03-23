@@ -125,6 +125,13 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     passed_papers: list[Paper] = []
     for paper in track(state.candidates, description="Screening papers"):
         if not paper.abstract:
+            screening_results.append(
+                ScreeningResult(
+                    paper_id=paper.paper_id,
+                    relevance_score=0,
+                    rationale="no abstract available",
+                )
+            )
             continue
 
         screening_result = _screen_paper(paper, state.questions, settings, screening_prompt)
