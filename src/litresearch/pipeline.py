@@ -35,6 +35,8 @@ def run_pipeline(
     overwrite: bool = False,
 ) -> PipelineState:
     """Run the configured pipeline from scratch or from a saved state."""
+    start_time = time.perf_counter()
+
     if resume_path is not None:
         state = PipelineState.load(resume_path)
         output_dir = Path(state.output_dir)
@@ -77,5 +79,14 @@ def run_pipeline(
             raise
         elapsed = time.perf_counter() - started
         console.print(f"[green]Completed[/green] {stage_name} in {elapsed:.2f}s")
+
+    # Print run summary
+    console.print("\n[bold]Run Summary[/bold]")
+    console.print(f"  Total time: {time.perf_counter() - start_time:.1f}s")
+    console.print(f"  Candidates: {len(state.candidates)}")
+    console.print(f"  Screened: {len(state.screening_results)}")
+    console.print(f"  Analyzed: {len(state.analyses)}")
+    console.print(f"  Exported: {len(state.ranked_paper_ids)}")
+    console.print(f"  Output: {state.output_dir}")
 
     return state

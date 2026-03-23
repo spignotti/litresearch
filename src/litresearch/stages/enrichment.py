@@ -22,7 +22,7 @@ ENRICHMENT_FIELDS = [
     "citationStyles",
 ]
 
-BATCH_SIZE = 500
+BATCH_SIZE = 500  # S2 /papers batch endpoint limit
 
 
 def _chunk(items: list[str], size: int) -> list[list[str]]:
