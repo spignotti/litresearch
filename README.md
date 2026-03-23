@@ -38,13 +38,19 @@ export ANTHROPIC_API_KEY=your_key_here
 export S2_API_KEY=your_key_here
 ```
 
-3. Run the pipeline:
+3. Copy the example config and tune defaults:
+
+```bash
+cp litresearch.toml.example litresearch.toml
+```
+
+4. Run the pipeline:
 
 ```bash
 litresearch run "What is the impact of large language models on software engineering?"
 ```
 
-4. Inspect the output directory:
+5. Inspect the output directory:
 
 ```text
 output/
@@ -74,7 +80,8 @@ litresearch run \
   --model anthropic/claude-sonnet-4-20250514 \
   --top-n 10 \
   --threshold 50 \
-  --output-dir runs/llm-se
+  --output-dir runs/llm-se \
+  --overwrite
 ```
 
 Resume an interrupted run:
@@ -101,18 +108,37 @@ Supported environment variables:
 - `ANTHROPIC_API_KEY`
 - `OPENROUTER_API_KEY`
 - `S2_API_KEY`
+- `S2_TIMEOUT`
+- `S2_REQUESTS_PER_SECOND`
+- `SCREENING_SELECTION_MODE`
+- `SCREENING_TOP_PERCENT`
+- `SCREENING_TOP_K`
+- `SCREENING_THRESHOLD`
 
 Example `litresearch.toml`:
 
 ```toml
 default_model = "openai/gpt-4o-mini"
-screening_threshold = 40
+screening_selection_mode = "top_percent"
+screening_top_percent = 0.3
+screening_threshold = 60
 top_n = 20
 max_results_per_query = 20
+s2_timeout = 10
+s2_requests_per_second = 1.0
 pdf_first_pages = 4
 pdf_last_pages = 2
 output_dir = "output"
 ```
+
+Screening selection modes:
+- `top_percent` (default): deep-analyze the top share of screened papers globally
+- `top_k`: deep-analyze the top K screened papers globally
+- `threshold`: deep-analyze papers scoring `>= screening_threshold`
+
+Semantic Scholar tuning:
+- `s2_timeout`: request timeout in seconds
+- `s2_requests_per_second`: global request rate cap across S2 endpoints
 
 ## Output Files
 - `report.md`: main literature review report with research questions, search summary, top papers, and synthesis
