@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from litresearch.config import Settings
 from litresearch.models import PipelineState, SearchQuery
 from litresearch.stages.discovery import run
@@ -110,3 +112,39 @@ class TestDiscoveryStage:
 
         assert len(result.candidates) == 1
         assert result.candidates[0].paper_id == "same-id"
+
+    def test_rate_limit_waits_between_requests(self, tmp_path) -> None:
+        """Test discovery throttles requests to configured RPS."""
+        settings = Settings(
+            s2_api_key=None,
+            s2_timeout=10,
+            s2_requests_per_second=1.0,
+            max_results_per_query=10,
+        )
+
+        query1 = SearchQuery(query="query1", facet="Facet1")
+        query2 = SearchQuery(query="query2", facet="Facet2")
+        state = PipelineState(
+            questions=["Question?"],
+            search_queries=[query1, query2],
+            current_stage="query_gen",
+            output_dir=str(tmp_path),
+            created_at="2024-01-01",
+            updated_at="2024-01-01",
+        )
+
+        mock_scholar = MagicMock()
+        mock_scholar.search_paper.return_value = SimpleNamespace(items=[])
+
+        with (
+            patch("litresearch.stages.discovery.SemanticScholar", return_value=mock_scholar),
+            patch(
+                "litresearch.stages.discovery.time.monotonic",
+                side_effect=[0.0, 0.2, 0.3, 1.3],
+            ),
+            patch("litresearch.stages.discovery.time.sleep") as mock_sleep,
+        ):
+            run(state, settings)
+
+        mock_sleep.assert_called_once()
+        assert mock_sleep.call_args.args[0] == pytest.approx(0.8)
