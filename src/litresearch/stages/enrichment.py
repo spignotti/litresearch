@@ -1,5 +1,6 @@
 """Stage 3: metadata enrichment."""
 
+import time
 from typing import Any, cast
 
 from rich.console import Console
@@ -43,13 +44,26 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     else:
         scholar = SemanticScholar(timeout=settings.s2_timeout, retry=False)
 
+    min_interval = 0.0
+    if settings.s2_requests_per_second > 0:
+        min_interval = 1.0 / settings.s2_requests_per_second
+    last_request_at: float | None = None
+
     papers_by_id = {paper.paper_id: paper for paper in state.candidates}
     for batch in _chunk(list(papers_by_id), BATCH_SIZE):
+        if last_request_at is not None and min_interval > 0:
+            elapsed = time.monotonic() - last_request_at
+            if elapsed < min_interval:
+                time.sleep(min_interval - elapsed)
+
         try:
             results = scholar.get_papers(batch, fields=ENRICHMENT_FIELDS)
         except Exception as exc:  # noqa: BLE001
             console.print(f"[yellow]Enrichment failed:[/yellow] {exc}")
+            last_request_at = time.monotonic()
             continue
+
+        last_request_at = time.monotonic()
 
         for result in cast(list[Any], results):
             enriched = Paper.from_s2(result)

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
     s2_api_key: str | None = None
     s2_timeout: int = 10  # seconds; SemanticScholar client timeout
+    s2_requests_per_second: float = 1.0  # max S2 request rate across endpoints
     default_model: str = "openai/gpt-4o-mini"
     screening_threshold: int = 60  # 0-100; papers below this are filtered before analysis
     top_n: int = 20
