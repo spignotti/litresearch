@@ -37,3 +37,4 @@ htmlcov/
 .pi/
 output-smoke/
 litresearch.toml
+.opencode/LESSONS.md
