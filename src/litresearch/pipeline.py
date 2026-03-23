@@ -32,14 +32,25 @@ def run_pipeline(
     questions: list[str],
     settings: Settings,
     resume_path: Path | None = None,
+    overwrite: bool = False,
 ) -> PipelineState:
     """Run the configured pipeline from scratch or from a saved state."""
+    start_time = time.perf_counter()
+
     if resume_path is not None:
         state = PipelineState.load(resume_path)
         output_dir = Path(state.output_dir)
         start_index = STAGE_ORDER.index(state.current_stage) + 1
     else:
         output_dir = Path(settings.output_dir)
+        if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
+            base_name = output_dir.name
+            parent = output_dir.parent
+            counter = 2
+            while output_dir.exists() and any(output_dir.iterdir()):
+                output_dir = parent / f"{base_name}-{counter}"
+                counter += 1
+            console.print(f"[yellow]Output directory already exists. Using:[/yellow] {output_dir}")
         state = PipelineState(
             questions=questions,
             current_stage="start",
@@ -68,5 +79,14 @@ def run_pipeline(
             raise
         elapsed = time.perf_counter() - started
         console.print(f"[green]Completed[/green] {stage_name} in {elapsed:.2f}s")
+
+    # Print run summary
+    console.print("\n[bold]Run Summary[/bold]")
+    console.print(f"  Total time: {time.perf_counter() - start_time:.1f}s")
+    console.print(f"  Candidates: {len(state.candidates)}")
+    console.print(f"  Screened: {len(state.screening_results)}")
+    console.print(f"  Analyzed: {len(state.analyses)}")
+    console.print(f"  Exported: {len(state.ranked_paper_ids)}")
+    console.print(f"  Output: {state.output_dir}")
 
     return state

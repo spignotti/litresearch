@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
     s2_api_key: str | None = None
+    s2_timeout: int = 10  # seconds; SemanticScholar client timeout
     default_model: str = "openai/gpt-4o-mini"
-    screening_threshold: int = 40
+    screening_threshold: int = 60  # 0-100; papers below this are filtered before analysis
     top_n: int = 20
     max_results_per_query: int = 20
     pdf_first_pages: int = 4

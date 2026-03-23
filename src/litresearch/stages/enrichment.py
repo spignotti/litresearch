@@ -22,7 +22,7 @@ ENRICHMENT_FIELDS = [
     "citationStyles",
 ]
 
-BATCH_SIZE = 500
+BATCH_SIZE = 500  # S2 /papers batch endpoint limit
 
 
 def _chunk(items: list[str], size: int) -> list[list[str]]:
@@ -35,9 +35,13 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
         return state.model_copy(update={"current_stage": "enrichment"})
 
     if settings.s2_api_key:
-        scholar = SemanticScholar(api_key=settings.s2_api_key)
+        scholar = SemanticScholar(
+            api_key=settings.s2_api_key,
+            timeout=settings.s2_timeout,
+            retry=False,
+        )
     else:
-        scholar = SemanticScholar()
+        scholar = SemanticScholar(timeout=settings.s2_timeout, retry=False)
 
     papers_by_id = {paper.paper_id: paper for paper in state.candidates}
     for batch in _chunk(list(papers_by_id), BATCH_SIZE):
