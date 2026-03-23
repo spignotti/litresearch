@@ -34,6 +34,6 @@ htmlcov/
 .uv_cache/
 
 # Agent runtime artifacts
-.pi/plans/
-.pi/reviews/
-.pi/LESSONS.md
+.pi/
+output-smoke/
+litresearch.toml

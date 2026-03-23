@@ -1,19 +1,47 @@
 """Application settings for litresearch."""
 
 from pydantic import computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict, TomlConfigSettingsSource
 
 
 class Settings(BaseSettings):
     """Environment-backed settings."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        toml_file="litresearch.toml",
+        extra="ignore",
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """Load settings from init, env, dotenv, TOML, then secrets."""
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            TomlConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
 
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
     s2_api_key: str | None = None
-    default_model: str = "gpt-4o-mini"
+    default_model: str = "openai/gpt-4o-mini"
+    screening_threshold: int = 40
+    top_n: int = 20
+    max_results_per_query: int = 20
+    pdf_first_pages: int = 4
+    pdf_last_pages: int = 2
+    output_dir: str = "output"
 
     @computed_field
     @property
