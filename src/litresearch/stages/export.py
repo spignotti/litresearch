@@ -157,6 +157,8 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     for paper in track(top_papers, description="Downloading PDFs"):
         if not paper.open_access_pdf_url:
             continue
+        if paper.pdf_downloaded:
+            continue
         pdf_bytes = download_pdf(paper.open_access_pdf_url)
         if pdf_bytes is None:
             continue

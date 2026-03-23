@@ -62,3 +62,53 @@ def test_export_skips_missing_bibtex(tmp_path) -> None:
 
     bibtex = (tmp_path / "references.bib").read_text(encoding="utf-8")
     assert bibtex.strip() == "@article{p1}"
+
+
+def test_export_skips_pdf_download_when_already_downloaded(tmp_path, monkeypatch) -> None:
+    state = PipelineState(
+        questions=["q"],
+        candidates=[
+            Paper(
+                paper_id="p1",
+                title="One",
+                open_access_pdf_url="https://example.com/p1.pdf",
+                pdf_downloaded=True,
+            )
+        ],
+        analyses=[
+            AnalysisResult(
+                paper_id="p1",
+                summary="summary",
+                key_findings=["finding"],
+                methodology="experiment",
+                relevance_score=80,
+                relevance_rationale="fit",
+            )
+        ],
+        ranked_paper_ids=["p1"],
+        current_stage="ranking",
+        output_dir=str(tmp_path),
+        created_at="2026-03-09T16:00:00Z",
+        updated_at="2026-03-09T16:00:00Z",
+    )
+
+    import litresearch.stages.export as export_stage
+
+    monkeypatch.setattr(
+        export_stage,
+        "call_llm",
+        lambda settings, system_prompt, user_content, expect_json=False: "## Consensus\n\nDone.",
+    )
+
+    download_calls = 0
+
+    def fake_download(_url: str):
+        nonlocal download_calls
+        download_calls += 1
+        return b"%PDF-1.0"
+
+    monkeypatch.setattr(export_stage, "download_pdf", fake_download)
+
+    run(state, Settings())
+
+    assert download_calls == 0

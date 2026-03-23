@@ -27,9 +27,13 @@ SEARCH_FIELDS = [
 def run(state: PipelineState, settings: Settings) -> PipelineState:
     """Discover candidate papers for the generated search queries."""
     if settings.s2_api_key:
-        scholar = SemanticScholar(api_key=settings.s2_api_key)
+        scholar = SemanticScholar(
+            api_key=settings.s2_api_key,
+            timeout=settings.s2_timeout,
+            retry=False,
+        )
     else:
-        scholar = SemanticScholar()
+        scholar = SemanticScholar(timeout=settings.s2_timeout, retry=False)
     papers_by_id: dict[str, Paper] = {}
 
     for search_query in track(state.search_queries, description="Discovering papers"):

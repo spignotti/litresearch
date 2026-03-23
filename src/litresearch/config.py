@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
     s2_api_key: str | None = None
+    s2_timeout: int = 10  # seconds; SemanticScholar client timeout
     default_model: str = "openai/gpt-4o-mini"
     screening_threshold: int = 40
     top_n: int = 20

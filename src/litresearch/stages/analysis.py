@@ -1,6 +1,7 @@
 """Stage 4: screening and extended paper analysis."""
 
 import json
+from pathlib import Path
 
 from rich.console import Console
 from rich.progress import track
@@ -39,12 +40,16 @@ def _screen_paper(
         console.print(f"[yellow]Screening failed:[/yellow] {paper.title} ({exc})")
         return None
 
-    payload = json.loads(response)
-    return ScreeningResult(
-        paper_id=paper.paper_id,
-        relevance_score=payload["relevance_score"],
-        rationale=payload["rationale"],
-    )
+    try:
+        payload = json.loads(response)
+        return ScreeningResult(
+            paper_id=paper.paper_id,
+            relevance_score=payload["relevance_score"],
+            rationale=payload["rationale"],
+        )
+    except json.JSONDecodeError:
+        console.print(f"[yellow]JSON parse failed:[/yellow] {paper.title}")
+        return None
 
 
 def _analyze_paper(
@@ -52,11 +57,17 @@ def _analyze_paper(
     questions: list[str],
     settings: Settings,
     prompt: str,
-) -> AnalysisResult | None:
+    output_dir: str,
+) -> tuple[AnalysisResult | None, bool]:
     pdf_text = ""
+    pdf_downloaded = False
     if paper.open_access_pdf_url:
         pdf_bytes = download_pdf(paper.open_access_pdf_url)
         if pdf_bytes is not None:
+            papers_dir = Path(output_dir) / "papers"
+            papers_dir.mkdir(parents=True, exist_ok=True)
+            (papers_dir / f"{paper.paper_id}.pdf").write_bytes(pdf_bytes)
+            pdf_downloaded = True
             pdf_text = extract_text(
                 pdf_bytes,
                 first_pages=settings.pdf_first_pages,
@@ -84,23 +95,31 @@ def _analyze_paper(
         response = call_llm(settings, prompt, user_content)
     except LLMError as exc:
         console.print(f"[yellow]Analysis failed:[/yellow] {paper.title} ({exc})")
-        return None
+        return (None, pdf_downloaded)
 
-    payload = json.loads(response)
-    return AnalysisResult(
-        paper_id=paper.paper_id,
-        summary=payload["summary"],
-        key_findings=payload.get("key_findings", []),
-        methodology=payload["methodology"],
-        relevance_score=payload["relevance_score"],
-        relevance_rationale=payload["relevance_rationale"],
-    )
+    try:
+        payload = json.loads(response)
+        return (
+            AnalysisResult(
+                paper_id=paper.paper_id,
+                summary=payload["summary"],
+                key_findings=payload.get("key_findings", []),
+                methodology=payload["methodology"],
+                relevance_score=payload["relevance_score"],
+                relevance_rationale=payload["relevance_rationale"],
+            ),
+            pdf_downloaded,
+        )
+    except json.JSONDecodeError:
+        console.print(f"[yellow]JSON parse failed:[/yellow] {paper.title}")
+        return (None, pdf_downloaded)
 
 
 def run(state: PipelineState, settings: Settings) -> PipelineState:
     """Screen candidate papers and analyze the relevant ones."""
     screening_prompt = load_prompt("screening")
     analysis_prompt = load_prompt("analysis")
+    papers_by_id = {paper.paper_id: paper for paper in state.candidates}
 
     screening_results: list[ScreeningResult] = []
     passed_papers: list[Paper] = []
@@ -118,12 +137,23 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
 
     analyses: list[AnalysisResult] = []
     for paper in track(passed_papers, description="Analyzing papers"):
-        analysis_result = _analyze_paper(paper, state.questions, settings, analysis_prompt)
+        analysis_result, pdf_downloaded = _analyze_paper(
+            paper,
+            state.questions,
+            settings,
+            analysis_prompt,
+            state.output_dir,
+        )
+        if pdf_downloaded:
+            papers_by_id[paper.paper_id] = paper.model_copy(update={"pdf_downloaded": True})
         if analysis_result is not None:
             analyses.append(analysis_result)
 
+    updated_candidates = [papers_by_id[paper.paper_id] for paper in state.candidates]
+
     return state.model_copy(
         update={
+            "candidates": updated_candidates,
             "screening_results": screening_results,
             "analyses": analyses,
             "current_stage": "analysis",
