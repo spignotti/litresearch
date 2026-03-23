@@ -1,5 +1,6 @@
 """Shared data models for the litresearch pipeline."""
 
+import html
 from pathlib import Path
 from typing import Protocol
 
@@ -70,12 +71,12 @@ class Paper(BaseModel):
         return cls(
             paper_id=s2_paper.paperId,
             corpus_id=s2_paper.corpusId,
-            title=s2_paper.title,
-            abstract=s2_paper.abstract,
+            title=html.unescape(s2_paper.title),
+            abstract=html.unescape(s2_paper.abstract) if s2_paper.abstract else None,
             authors=[author.name for author in authors if author.name],
             year=s2_paper.year,
             citation_count=s2_paper.citationCount or 0,
-            venue=s2_paper.venue,
+            venue=html.unescape(s2_paper.venue) if s2_paper.venue else None,
             doi=external_ids.get("DOI"),
             open_access_pdf_url=open_access_pdf.get("url"),
             bibtex=citation_styles.get("bibtex"),
