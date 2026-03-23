@@ -32,6 +32,7 @@ def run_pipeline(
     questions: list[str],
     settings: Settings,
     resume_path: Path | None = None,
+    overwrite: bool = False,
 ) -> PipelineState:
     """Run the configured pipeline from scratch or from a saved state."""
     if resume_path is not None:
@@ -40,6 +41,14 @@ def run_pipeline(
         start_index = STAGE_ORDER.index(state.current_stage) + 1
     else:
         output_dir = Path(settings.output_dir)
+        if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
+            base_name = output_dir.name
+            parent = output_dir.parent
+            counter = 2
+            while output_dir.exists() and any(output_dir.iterdir()):
+                output_dir = parent / f"{base_name}-{counter}"
+                counter += 1
+            console.print(f"[yellow]Output directory already exists. Using:[/yellow] {output_dir}")
         state = PipelineState(
             questions=questions,
             current_stage="start",

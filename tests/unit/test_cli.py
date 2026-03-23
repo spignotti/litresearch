@@ -28,6 +28,7 @@ def test_run_help_shows_expected_options() -> None:
     assert "final top-N cutoff" in output
     assert "output directory" in output
     assert "screening threshold" in output
+    assert "Overwrite existing output directory" in output
 
 
 def test_resume_help_shows_expected_options() -> None:

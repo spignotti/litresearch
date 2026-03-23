@@ -22,16 +22,17 @@ def _build_settings(
     threshold: int | None = None,
 ) -> Settings:
     """Load settings and apply CLI overrides."""
-    settings = Settings()
-    if model is not None:
-        settings.default_model = model
-    if top_n is not None:
-        settings.top_n = top_n
-    if output_dir is not None:
-        settings.output_dir = output_dir
-    if threshold is not None:
-        settings.screening_threshold = threshold
-    return settings
+    overrides = {
+        key: value
+        for key, value in {
+            "default_model": model,
+            "top_n": top_n,
+            "output_dir": output_dir,
+            "screening_threshold": threshold,
+        }.items()
+        if value is not None
+    }
+    return Settings(**overrides)
 
 
 @app.command()
@@ -65,6 +66,10 @@ def run(
         int | None,
         typer.Option("--threshold", help="Override the screening threshold."),
     ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite existing output directory."),
+    ] = False,
 ) -> None:
     """Run the literature research pipeline."""
     settings = _build_settings(
@@ -74,7 +79,7 @@ def run(
         threshold=threshold,
     )
 
-    state = run_pipeline(questions, settings)
+    state = run_pipeline(questions, settings, overwrite=overwrite)
     console.print(f"[green]Run complete.[/green] Output: {state.output_dir}")
 
 
