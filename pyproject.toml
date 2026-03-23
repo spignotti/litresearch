@@ -1,6 +1,6 @@
 [project]
 name = "litresearch"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI tool for automated literature research workflows."
 readme = "README.md"
 requires-python = ">=3.12"
