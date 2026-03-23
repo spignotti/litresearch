@@ -1,6 +1,7 @@
 """Stage 4: screening and extended paper analysis."""
 
 import json
+import math
 from pathlib import Path
 
 from rich.console import Console
@@ -13,6 +14,45 @@ from litresearch.pdf import download_pdf, extract_text
 from litresearch.prompts import load_prompt
 
 console = Console()
+
+
+def _select_papers_for_analysis(
+    screened_papers: list[tuple[Paper, ScreeningResult, int]],
+    settings: Settings,
+) -> list[Paper]:
+    sorted_screened = sorted(
+        screened_papers,
+        key=lambda item: (
+            -item[1].relevance_score,
+            -item[0].citation_count,
+            -(item[0].year or 0),
+            item[2],
+        ),
+    )
+
+    if settings.screening_selection_mode == "threshold":
+        return [
+            paper
+            for paper, screening_result, _ in sorted_screened
+            if screening_result.relevance_score >= settings.screening_threshold
+        ]
+
+    if settings.screening_selection_mode == "top_k":
+        if settings.screening_top_k is None or settings.screening_top_k <= 0:
+            raise ValueError("screening_top_k must be > 0 when screening_selection_mode=top_k")
+        return [paper for paper, _, _ in sorted_screened[: settings.screening_top_k]]
+
+    if settings.screening_selection_mode == "top_percent":
+        if not (0 < settings.screening_top_percent <= 1):
+            raise ValueError(
+                "screening_top_percent must be in (0, 1] when screening_selection_mode=top_percent"
+            )
+        if not sorted_screened:
+            return []
+        selected_count = max(1, math.ceil(len(sorted_screened) * settings.screening_top_percent))
+        return [paper for paper, _, _ in sorted_screened[:selected_count]]
+
+    raise ValueError(f"Unsupported screening_selection_mode: {settings.screening_selection_mode}")
 
 
 def _screen_paper(
@@ -122,8 +162,8 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     papers_by_id = {paper.paper_id: paper for paper in state.candidates}
 
     screening_results: list[ScreeningResult] = []
-    passed_papers: list[Paper] = []
-    for paper in track(state.candidates, description="Screening papers"):
+    screened_papers: list[tuple[Paper, ScreeningResult, int]] = []
+    for index, paper in enumerate(track(state.candidates, description="Screening papers")):
         if not paper.abstract:
             screening_results.append(
                 ScreeningResult(
@@ -139,8 +179,9 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
             continue
 
         screening_results.append(screening_result)
-        if screening_result.relevance_score >= settings.screening_threshold:
-            passed_papers.append(paper)
+        screened_papers.append((paper, screening_result, index))
+
+    passed_papers = _select_papers_for_analysis(screened_papers, settings)
 
     analyses: list[AnalysisResult] = []
     for paper in track(passed_papers, description="Analyzing papers"):

@@ -1,5 +1,7 @@
 """Application settings for litresearch."""
 
+from typing import Literal
+
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict, TomlConfigSettingsSource
 
@@ -38,7 +40,10 @@ class Settings(BaseSettings):
     s2_timeout: int = 10  # seconds; SemanticScholar client timeout
     s2_requests_per_second: float = 1.0  # max S2 request rate across endpoints
     default_model: str = "openai/gpt-4o-mini"
-    screening_threshold: int = 60  # 0-100; papers below this are filtered before analysis
+    screening_selection_mode: Literal["top_percent", "threshold", "top_k"] = "top_percent"
+    screening_top_percent: float = 0.3  # 0-1; used when screening_selection_mode=top_percent
+    screening_top_k: int | None = None  # used when screening_selection_mode=top_k
+    screening_threshold: int = 60  # 0-100; used when screening_selection_mode=threshold
     top_n: int = 20
     max_results_per_query: int = 20
     pdf_first_pages: int = 4

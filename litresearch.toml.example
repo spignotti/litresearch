@@ -1,4 +1,6 @@
 default_model = "openrouter/openai/gpt-4o-mini"
+screening_selection_mode = "top_percent"
+screening_top_percent = 0.3
 screening_threshold = 60
 top_n = 5
 max_results_per_query = 5
