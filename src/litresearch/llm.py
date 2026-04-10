@@ -6,6 +6,7 @@ from litellm import completion
 from rich.console import Console
 
 from litresearch.config import Settings
+from litresearch.utils import retry_with_backoff
 
 console = Console()
 
@@ -28,11 +29,22 @@ def call_llm(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
+            "timeout": settings.llm_timeout,
         }
         if expect_json:
             completion_kwargs["response_format"] = {"type": "json_object"}
 
-        response = cast(Any, completion(**completion_kwargs))
+        def on_retry(exc: Exception, attempt: int) -> None:
+            console.print(
+                f"[yellow]LLM request retry {attempt}/{settings.max_retries}:[/yellow] {exc}"
+            )
+
+        completion_with_retry = retry_with_backoff(
+            max_retries=settings.max_retries,
+            base_delay=settings.retry_base_delay,
+            on_retry=on_retry,
+        )(completion)
+        response = cast(Any, completion_with_retry(**completion_kwargs))
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]LLM request failed:[/red] {exc}")
         raise LLMError(str(exc)) from exc

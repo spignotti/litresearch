@@ -1,11 +1,132 @@
-default_model = "openrouter/openai/gpt-4o-mini"
-screening_selection_mode = "top_percent"
-screening_top_percent = 0.3
-screening_threshold = 60
-top_n = 5
-max_results_per_query = 5
+# litresearch.toml - Example configuration file
+# Copy this file to litresearch.toml and customize for your use
+
+# ============================================================================
+# API Keys (can also be set via environment variables)
+# ============================================================================
+
+# OpenAI API key (or use OPENAI_API_KEY env var)
+# openai_api_key = "sk-..."
+
+# Anthropic API key (or use ANTHROPIC_API_KEY env var)
+# anthropic_api_key = "sk-ant-..."
+
+# OpenRouter API key (or use OPENROUTER_API_KEY env var)
+# openrouter_api_key = "sk-or-..."
+
+# Semantic Scholar API key (optional, increases rate limits)
+# s2_api_key = "..."
+
+# Zotero API key (for Zotero export)
+# zotero_api_key = "..."
+
+# ============================================================================
+# LLM Configuration
+# ============================================================================
+
+# Default model to use (format: provider/model)
+# Supported: openai/gpt-4o-mini, anthropic/claude-3-haiku, openrouter/...
+default_model = "openai/gpt-4o-mini"
+
+# LLM timeout in seconds
+llm_timeout = 120
+
+# LLM retry settings
+max_retries = 3
+retry_base_delay = 1.0
+
+# ============================================================================
+# Discovery Configuration
+# ============================================================================
+
+# Discovery sources to use (options: s2, openalex)
+# Using both increases coverage but takes longer
+discovery_sources = ["s2"]
+
+# OpenAlex email for polite pool (optional, increases rate limits)
+# openalex_email = "your.email@example.com"
+
+# Semantic Scholar settings
 s2_timeout = 10
 s2_requests_per_second = 1.0
+
+# Maximum results per search query
+max_results_per_query = 20
+
+# ============================================================================
+# Screening Configuration
+# ============================================================================
+
+# Screening selection mode: top_percent, threshold, or top_k
+screening_selection_mode = "top_percent"
+
+# When mode=top_percent: select top N% of screened papers
+screening_top_percent = 0.3
+
+# When mode=threshold: minimum relevance score (0-100) to pass
+screening_threshold = 60
+
+# When mode=top_k: select exactly K papers
+# screening_top_k = 10
+
+# ============================================================================
+# Analysis Configuration
+# ============================================================================
+
+# Number of top papers to export
+top_n = 20
+
+# PDF extraction mode: budget (token-limited) or pages (fixed pages)
+pdf_extraction_mode = "budget"
+
+# Token budget for PDF extraction (when mode=budget)
+pdf_token_budget = 4000
+
+# Number of pages to extract from start (legacy mode)
 pdf_first_pages = 4
+
+# Number of pages to extract from end (legacy mode)
 pdf_last_pages = 2
-output_dir = "output-smoke"
+
+# Allow abstract-fallback screening for papers without abstracts
+abstract_fallback = true
+
+# Directory containing PDFs to inject (optional)
+# PDFs should be named: {paper_id}.pdf or {doi}.pdf (slashes replaced with underscores)
+# inject_pdf_dir = "/path/to/pdfs"
+
+# ============================================================================
+# Citation Expansion (Optional)
+# ============================================================================
+
+# Enable citation graph expansion to discover frequently referenced works
+expand_citations = false
+
+# Minimum number of cross-references required to include a paper
+min_cross_refs = 3
+
+# ============================================================================
+# Zotero Export (Optional)
+# ============================================================================
+
+# Enable Zotero export
+zotero_export = false
+
+# Zotero library ID (find at https://www.zotero.org/settings/keys)
+# zotero_library_id = "..."
+
+# Zotero library type: user or group
+zotero_library_type = "user"
+
+# Zotero collection key to add papers to (optional)
+# zotero_collection_key = "..."
+
+# Tag to add to all exported items (optional)
+# zotero_tag = "litresearch:2026-01-09"
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+
+# Output directory for results
+output_dir = "output"

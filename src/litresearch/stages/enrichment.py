@@ -8,6 +8,7 @@ from semanticscholar import SemanticScholar
 
 from litresearch.config import Settings
 from litresearch.models import Paper, PipelineState
+from litresearch.utils import retry_with_backoff
 
 console = Console()
 
@@ -50,14 +51,30 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     last_request_at: float | None = None
 
     papers_by_id = {paper.paper_id: paper for paper in state.candidates}
-    for batch in _chunk(list(papers_by_id), BATCH_SIZE):
+    enrichable_ids = [
+        paper_id for paper_id, paper in papers_by_id.items() if paper.source in {"s2", "both"}
+    ]
+
+    for batch in _chunk(enrichable_ids, BATCH_SIZE):
         if last_request_at is not None and min_interval > 0:
             elapsed = time.monotonic() - last_request_at
             if elapsed < min_interval:
                 time.sleep(min_interval - elapsed)
 
         try:
-            results = scholar.get_papers(batch, fields=ENRICHMENT_FIELDS)
+
+            def on_retry(exc: Exception, attempt: int) -> None:
+                console.print(
+                    f"[yellow]Enrichment retry {attempt}/{settings.max_retries}:[/yellow] {exc}"
+                )
+
+            get_papers_with_retry = retry_with_backoff(
+                max_retries=settings.max_retries,
+                base_delay=settings.retry_base_delay,
+                on_retry=on_retry,
+            )(scholar.get_papers)
+
+            results = get_papers_with_retry(batch, fields=ENRICHMENT_FIELDS)
         except Exception as exc:  # noqa: BLE001
             console.print(f"[yellow]Enrichment failed:[/yellow] {exc}")
             last_request_at = time.monotonic()
@@ -67,8 +84,12 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
 
         for result in cast(list[Any], results):
             enriched = Paper.from_s2(result)
+            update_payload = enriched.model_dump(
+                exclude_none=True,
+                exclude={"paper_id", "source"},
+            )
             papers_by_id[enriched.paper_id] = papers_by_id[enriched.paper_id].model_copy(
-                update=enriched.model_dump(exclude_none=True)
+                update=update_payload
             )
 
     return state.model_copy(

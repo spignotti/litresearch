@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     s2_api_key: str | None = None
     s2_timeout: int = 10  # seconds; SemanticScholar client timeout
     s2_requests_per_second: float = 1.0  # max S2 request rate across endpoints
+    max_retries: int = 3
+    retry_base_delay: float = 1.0
+    llm_timeout: int = 120
     default_model: str = "openai/gpt-4o-mini"
     screening_selection_mode: Literal["top_percent", "threshold", "top_k"] = "top_percent"
     screening_top_percent: float = 0.3  # 0-1; used when screening_selection_mode=top_percent
@@ -46,8 +49,26 @@ class Settings(BaseSettings):
     screening_threshold: int = 60  # 0-100; used when screening_selection_mode=threshold
     top_n: int = 20
     max_results_per_query: int = 20
+
+    # Discovery sources
+    discovery_sources: list[str] = ["s2"]
+    openalex_email: str | None = None
+
+    # Citation expansion
+    expand_citations: bool = False
+    min_cross_refs: int = 3
+
+    # Zotero export
+    zotero_library_id: str | None = None
+    zotero_api_key: str | None = None
+    zotero_library_type: Literal["user", "group"] = "user"
+    zotero_collection_key: str | None = None
+    zotero_tag: str | None = None
+    zotero_export: bool = False
+
     pdf_first_pages: int = 4
     pdf_last_pages: int = 2
+    inject_pdf_dir: str | None = None
     output_dir: str = "output"
 
     @computed_field

@@ -9,33 +9,73 @@ from rich.console import Console
 console = Console()
 
 
-def extract_text(pdf_bytes: bytes, first_pages: int = 4, last_pages: int = 2) -> str:
-    """Extract text from the first and last pages of a PDF."""
+def extract_text(
+    pdf_bytes: bytes,
+    token_budget: int = 4000,
+    keywords: list[str] | None = None,
+) -> str | None:
+    """Extract text from PDF with token budget and keyword scoring.
+
+    Args:
+        pdf_bytes: Raw PDF bytes
+        token_budget: Maximum tokens to extract (approx 4 chars per token)
+        keywords: List of keywords to prioritize when selecting pages
+
+    Returns:
+        Extracted text or None if extraction fails
+    """
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
     except Exception:  # noqa: BLE001
-        return ""
+        return None
 
     page_count = len(reader.pages)
     if page_count == 0:
-        return ""
+        return None
 
-    first_page_indexes = list(range(min(first_pages, page_count)))
-    last_start = max(page_count - last_pages, 0)
-    last_page_indexes = list(range(last_start, page_count))
-    page_indexes = sorted(set(first_page_indexes + last_page_indexes))
-
-    parts: list[str] = []
-    for page_index in page_indexes:
+    pages: list[tuple[int, str]] = []
+    for i in range(page_count):
         try:
-            page_text = reader.pages[page_index].extract_text() or ""
+            text = reader.pages[i].extract_text() or ""
+            if text.strip():
+                pages.append((i, text.strip()))
         except Exception:  # noqa: BLE001
-            page_text = ""
+            continue
 
-        if page_text.strip():
-            parts.append(f"\n--- Page {page_index + 1} ---\n{page_text.strip()}")
+    if not pages:
+        return None
 
-    return "\n".join(parts).strip()
+    if keywords and len(pages) > 1:
+        keyword_set = {keyword.lower() for keyword in keywords}
+        scored_pages: list[tuple[int, int, str]] = []
+        for idx, text in pages:
+            text_lower = text.lower()
+            score = sum(1 for keyword in keyword_set if keyword in text_lower)
+            if idx == 0:
+                score += 1
+            scored_pages.append((score, idx, text))
+
+        scored_pages.sort(key=lambda item: (-item[0], item[1]))
+        pages = [(idx, text) for _, idx, text in scored_pages]
+
+    max_chars = token_budget * 4
+    parts: list[str] = []
+    total_chars = 0
+
+    for idx, text in pages:
+        page_header = f"\n--- Page {idx + 1} ---\n"
+        chunk = page_header + text
+
+        if total_chars + len(chunk) > max_chars and parts:
+            break
+
+        parts.append(chunk)
+        total_chars += len(chunk)
+
+        if total_chars >= max_chars:
+            break
+
+    return "\n".join(parts).strip() if parts else None
 
 
 def download_pdf(url: str) -> bytes | None:
