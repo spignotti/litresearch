@@ -1,8 +1,10 @@
 """Shared data models for the litresearch pipeline."""
 
 import html
+import os
+import tempfile
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -57,7 +59,17 @@ class Paper(BaseModel):
     doi: str | None = None
     open_access_pdf_url: str | None = None
     bibtex: str | None = None
-    pdf_downloaded: bool = False
+    source: Literal["s2", "openalex", "both", "citation_expansion"] = "s2"
+    pdf_path: str | None = None
+    pdf_status: Literal["not_attempted", "downloaded", "unavailable", "user_provided"] = (
+        "not_attempted"
+    )
+    data_completeness: Literal["full", "abstract_only", "metadata_only"] = "full"
+
+    @property
+    def pdf_downloaded(self) -> bool:
+        """Backwards-compatible indicator for downloaded or provided PDFs."""
+        return self.pdf_status in {"downloaded", "user_provided"} or self.pdf_path is not None
 
     @classmethod
     def from_s2(cls, s2_paper: S2PaperLike) -> "Paper":
@@ -80,6 +92,7 @@ class Paper(BaseModel):
             doi=external_ids.get("DOI"),
             open_access_pdf_url=open_access_pdf.get("url"),
             bibtex=citation_styles.get("bibtex"),
+            source="s2",
         )
 
 
@@ -102,6 +115,40 @@ class AnalysisResult(BaseModel):
     relevance_rationale: str
 
 
+class StageMetrics(BaseModel):
+    """Metrics for a single pipeline stage."""
+
+    name: str
+    started_at: str
+    completed_at: str | None = None
+    duration_seconds: float = 0.0
+    input_count: int = 0
+    output_count: int = 0
+    error_count: int = 0
+
+
+class RunMetrics(BaseModel):
+    """Metrics for a complete pipeline run."""
+
+    run_id: str
+    started_at: str
+    completed_at: str | None = None
+    total_duration_seconds: float = 0.0
+    stages: list[StageMetrics] = Field(default_factory=list)
+
+    total_candidates: int = 0
+    total_screened: int = 0
+    total_analyzed: int = 0
+    total_exported: int = 0
+    citation_expanded: int = 0
+
+    sources: dict[str, int] = Field(default_factory=dict)
+
+    pdfs_downloaded: int = 0
+    pdfs_user_provided: int = 0
+    pdfs_unavailable: int = 0
+
+
 class PipelineState(BaseModel):
     """Serializable pipeline state for fresh runs and resume."""
 
@@ -118,10 +165,23 @@ class PipelineState(BaseModel):
     updated_at: str
 
     def save(self, path: str | Path) -> None:
-        """Write the pipeline state to disk as JSON."""
+        """Write the pipeline state to disk atomically."""
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+
+        fd, temp_path = tempfile.mkstemp(
+            dir=output_path.parent,
+            prefix=".state_tmp_",
+            suffix=".json",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as file:
+                file.write(self.model_dump_json(indent=2))
+            os.replace(temp_path, output_path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
     @classmethod
     def load(cls, path: str | Path) -> "PipelineState":

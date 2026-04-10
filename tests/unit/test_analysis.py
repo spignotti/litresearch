@@ -29,10 +29,12 @@ def test_analysis_saves_pdf_and_marks_candidate_downloaded(tmp_path, monkeypatch
     monkeypatch.setattr(
         analysis_stage,
         "_screen_paper",
-        lambda paper, questions, settings, prompt: ScreeningResult(
-            paper_id=paper.paper_id,
-            relevance_score=100,
-            rationale="fit",
+        lambda paper, questions, settings, prompt, screening_fallback_prompt, pdf_excerpt=None: (
+            ScreeningResult(
+                paper_id=paper.paper_id,
+                relevance_score=100,
+                rationale="fit",
+            )
         ),
     )
     monkeypatch.setattr(analysis_stage, "download_pdf", lambda _url: b"%PDF-1.0")
@@ -53,6 +55,9 @@ def test_analysis_saves_pdf_and_marks_candidate_downloaded(tmp_path, monkeypatch
 
     updated_state = run(state, Settings())
 
-    assert updated_state.candidates[0].pdf_downloaded is True
+    assert updated_state.candidates[0].pdf_status == "downloaded"
+    # pdf_path may be absolute or relative depending on implementation
+    assert updated_state.candidates[0].pdf_path
+    assert "p1.pdf" in updated_state.candidates[0].pdf_path
     assert (tmp_path / "papers" / "p1.pdf").read_bytes() == b"%PDF-1.0"
     assert len(updated_state.analyses) == 1

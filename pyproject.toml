@@ -1,6 +1,6 @@
 [project]
 name = "litresearch"
-version = "0.2.0"
+version = "1.0.0"
 description = "CLI tool for automated literature research workflows."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -10,9 +10,11 @@ authors = [
 license = { text = "MIT" }
 dependencies = [
     "httpx>=0.28.1",
-    "litellm>=1.82.0",
+    "litellm==1.82.6",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
+    "pyalex>=0.15",
+    "pyzotero>=1.6",
     "pypdf>=6.7.5",
     "rich>=14.3.3",
     "semanticscholar>=0.11.0",

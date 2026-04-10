@@ -25,19 +25,19 @@ class BrokenReader:
         raise ValueError("bad pdf")
 
 
-def test_extract_text_returns_empty_string_on_invalid_pdf(monkeypatch) -> None:
+def test_extract_text_returns_none_on_invalid_pdf(monkeypatch) -> None:
     monkeypatch.setattr(pdf, "PdfReader", BrokenReader)
 
-    assert pdf.extract_text(b"not a pdf") == ""
+    assert pdf.extract_text(b"not a pdf") is None
 
 
-def test_extract_text_uses_first_and_last_pages_without_overlap(monkeypatch) -> None:
+def test_extract_text_returns_all_pages_within_budget(monkeypatch) -> None:
     monkeypatch.setattr(pdf, "PdfReader", FakeReader)
 
-    text = pdf.extract_text(b"%PDF", first_pages=2, last_pages=2)
-
+    text = pdf.extract_text(b"%PDF", token_budget=10000)
+    assert text is not None
     assert "Page 1 text" in text
     assert "Page 2 text" in text
+    assert "Page 3 text" in text
     assert "Page 4 text" in text
     assert "Page 5 text" in text
-    assert "Page 3 text" not in text

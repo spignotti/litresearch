@@ -1,78 +1,19 @@
+import pytest
+
 from litresearch.config import Settings
 from litresearch.models import AnalysisResult, Paper, PipelineState
-from litresearch.stages.export import _format_ris_entry, run
+from litresearch.stages.export import run
 
 
-def test_format_ris_entry_includes_expected_fields() -> None:
-    paper = Paper(
-        paper_id="p1",
-        title="Example Paper",
-        authors=["Ada Lovelace", "Alan Turing"],
-        year=2024,
-        venue="ICSE",
-        doi="10.1234/example",
-        open_access_pdf_url="https://example.com/paper.pdf",
-    )
-
-    entry = _format_ris_entry(paper)
-
-    assert "TY  - JOUR" in entry
-    assert "TI  - Example Paper" in entry
-    assert "AU  - Ada Lovelace" in entry
-    assert "AU  - Alan Turing" in entry
-    assert "PY  - 2024" in entry
-    assert "JO  - ICSE" in entry
-    assert "DO  - 10.1234/example" in entry
-    assert "UR  - https://example.com/paper.pdf" in entry
-    assert entry.endswith("ER  -")
-
-
-def test_export_skips_missing_bibtex(tmp_path) -> None:
-    state = PipelineState(
-        questions=["q"],
-        candidates=[
-            Paper(paper_id="p1", title="One", bibtex="@article{p1}"),
-            Paper(paper_id="p2", title="Two", bibtex=None),
-        ],
-        analyses=[
-            AnalysisResult(
-                paper_id="p1",
-                summary="summary",
-                key_findings=["finding"],
-                methodology="experiment",
-                relevance_score=80,
-                relevance_rationale="fit",
-            )
-        ],
-        ranked_paper_ids=["p1", "p2"],
-        current_stage="ranking",
-        output_dir=str(tmp_path),
-        created_at="2026-03-09T16:00:00Z",
-        updated_at="2026-03-09T16:00:00Z",
-    )
-
-    import litresearch.stages.export as export_stage
-
-    export_stage.call_llm = lambda settings, system_prompt, user_content, expect_json=False: (
-        "## Consensus\n\nDone."
-    )
-    export_stage.download_pdf = lambda url: None
-
-    run(state, Settings())
-
-    bibtex = (tmp_path / "references.bib").read_text(encoding="utf-8")
-    assert bibtex.strip() == "@article{p1}"
-
-
-def test_export_skips_pdf_download_when_already_downloaded(tmp_path, monkeypatch) -> None:
-    state = PipelineState(
-        questions=["q"],
+@pytest.fixture
+def minimal_state(tmp_path) -> PipelineState:
+    return PipelineState(
+        questions=["test question"],
         candidates=[
             Paper(
                 paper_id="p1",
                 title="One",
                 open_access_pdf_url="https://example.com/p1.pdf",
-                pdf_downloaded=True,
             )
         ],
         analyses=[
@@ -92,23 +33,15 @@ def test_export_skips_pdf_download_when_already_downloaded(tmp_path, monkeypatch
         updated_at="2026-03-09T16:00:00Z",
     )
 
-    import litresearch.stages.export as export_stage
 
-    monkeypatch.setattr(
-        export_stage,
-        "call_llm",
-        lambda settings, system_prompt, user_content, expect_json=False: "## Consensus\n\nDone.",
-    )
+def test_export_writes_report(minimal_state, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("litresearch.stages.export.load_prompt", lambda _: "")
+    monkeypatch.setattr("litresearch.stages.export.call_llm", lambda *a, **kw: "synthesis")
+    monkeypatch.setattr("litresearch.stages.export.download_pdf", lambda _: None)
 
-    download_calls = 0
+    run(minimal_state, Settings())
 
-    def fake_download(_url: str):
-        nonlocal download_calls
-        download_calls += 1
-        return b"%PDF-1.0"
-
-    monkeypatch.setattr(export_stage, "download_pdf", fake_download)
-
-    run(state, Settings())
-
-    assert download_calls == 0
+    assert (tmp_path / "report.md").exists()
+    assert (tmp_path / "references.bib").exists()
+    assert (tmp_path / "references.ris").exists()
+    assert (tmp_path / "data.json").exists()

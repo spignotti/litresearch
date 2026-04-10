@@ -1,9 +1,11 @@
 """Stage 4: screening and extended paper analysis."""
 
-import json
 import math
+import re
 from pathlib import Path
+from typing import Literal
 
+from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.progress import track
 
@@ -12,8 +14,22 @@ from litresearch.llm import LLMError, call_llm
 from litresearch.models import AnalysisResult, Paper, PipelineState, ScreeningResult
 from litresearch.pdf import download_pdf, extract_text
 from litresearch.prompts import load_prompt
+from litresearch.utils import parse_llm_json, safe_filename
 
 console = Console()
+
+
+class _ScreeningPayload(BaseModel):
+    relevance_score: int
+    rationale: str
+
+
+class _AnalysisPayload(BaseModel):
+    summary: str
+    key_findings: list[str] = Field(default_factory=list)
+    methodology: str
+    relevance_score: int
+    relevance_rationale: str
 
 
 def _select_papers_for_analysis(
@@ -55,41 +71,112 @@ def _select_papers_for_analysis(
     raise ValueError(f"Unsupported screening_selection_mode: {settings.screening_selection_mode}")
 
 
+def _build_keywords(questions: list[str], title: str) -> list[str]:
+    terms = re.findall(r"[A-Za-z0-9][A-Za-z0-9-]{2,}", " ".join([*questions, title]))
+    unique: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        lowered = term.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        unique.append(lowered)
+    return unique
+
+
+def _injected_pdf_path(paper: Paper, inject_pdfs_dir: Path | None) -> Path | None:
+    if inject_pdfs_dir is None:
+        return None
+
+    for candidate in [paper.paper_id, safe_filename(paper.paper_id)]:
+        candidate_path = inject_pdfs_dir / f"{candidate}.pdf"
+        if candidate_path.exists():
+            return candidate_path
+
+    if paper.doi:
+        for candidate in [paper.doi, safe_filename(paper.doi), paper.doi.replace("/", "_")]:
+            candidate_path = inject_pdfs_dir / f"{candidate}.pdf"
+            if candidate_path.exists():
+                return candidate_path
+
+    return None
+
+
+def _screening_pdf_excerpt(
+    paper: Paper,
+    questions: list[str],
+    inject_pdfs_dir: Path | None,
+) -> str | None:
+    keywords = _build_keywords(questions, paper.title)
+
+    injected_path = _injected_pdf_path(paper, inject_pdfs_dir)
+    if injected_path is not None:
+        try:
+            pdf_bytes = injected_path.read_bytes()
+        except Exception:  # noqa: BLE001
+            pdf_bytes = None
+        if pdf_bytes is not None:
+            return extract_text(pdf_bytes, token_budget=1200, keywords=keywords)
+
+    if paper.open_access_pdf_url:
+        pdf_bytes = download_pdf(paper.open_access_pdf_url)
+        if pdf_bytes is not None:
+            return extract_text(pdf_bytes, token_budget=1200, keywords=keywords)
+
+    return None
+
+
 def _screen_paper(
     paper: Paper,
     questions: list[str],
     settings: Settings,
     prompt: str,
+    fallback_prompt: str,
+    pdf_excerpt: str | None = None,
 ) -> ScreeningResult | None:
-    user_content = "\n".join(
-        [
-            "Research questions:",
-            *[f"- {question}" for question in questions],
-            "",
-            f"Title: {paper.title}",
-            f"Authors: {', '.join(paper.authors) or 'Unknown'}",
-            f"Year: {paper.year or 'Unknown'}",
-            f"Venue: {paper.venue or 'Unknown'}",
-            f"Abstract: {paper.abstract or 'Unavailable'}",
-        ]
-    )
+    if paper.abstract:
+        selected_prompt = prompt
+        user_content = "\n".join(
+            [
+                "Research questions:",
+                *[f"- {question}" for question in questions],
+                "",
+                f"Title: {paper.title}",
+                f"Authors: {', '.join(paper.authors) or 'Unknown'}",
+                f"Year: {paper.year or 'Unknown'}",
+                f"Venue: {paper.venue or 'Unknown'}",
+                f"Abstract: {paper.abstract}",
+            ]
+        )
+    else:
+        selected_prompt = fallback_prompt
+        user_content = "\n".join(
+            [
+                "Research questions:",
+                *[f"- {question}" for question in questions],
+                "",
+                "Available signals:",
+                f"- Title: {paper.title}",
+                f"- Authors: {', '.join(paper.authors) or 'Unknown'}",
+                f"- Year: {paper.year or 'Unknown'}",
+                f"- Venue: {paper.venue or 'Unknown'}",
+                f"- Citation count: {paper.citation_count}",
+                f"- PDF excerpt: {pdf_excerpt or 'Unavailable'}",
+            ]
+        )
 
     try:
-        response = call_llm(settings, prompt, user_content)
+        response = call_llm(settings, selected_prompt, user_content)
     except LLMError as exc:
         console.print(f"[yellow]Screening failed:[/yellow] {paper.title} ({exc})")
         return None
 
-    try:
-        payload = json.loads(response)
-        return ScreeningResult(
-            paper_id=paper.paper_id,
-            relevance_score=payload["relevance_score"],
-            rationale=payload["rationale"],
-        )
-    except json.JSONDecodeError:
+    payload = parse_llm_json(response, _ScreeningPayload, console=console)
+    if payload is None:
         console.print(f"[yellow]JSON parse failed:[/yellow] {paper.title}")
         return None
+
+    return ScreeningResult(paper_id=paper.paper_id, **payload)
 
 
 def _analyze_paper(
@@ -98,21 +185,52 @@ def _analyze_paper(
     settings: Settings,
     prompt: str,
     output_dir: str,
-) -> tuple[AnalysisResult | None, bool]:
-    pdf_text = ""
-    pdf_downloaded = False
-    if paper.open_access_pdf_url:
+    inject_pdfs_dir: Path | None,
+) -> tuple[AnalysisResult | None, Paper]:
+    papers_dir = Path(output_dir) / "papers"
+    keywords = _build_keywords(questions, paper.title)
+
+    pdf_text: str | None = None
+    pdf_path: str | None = None
+    pdf_status: Literal["downloaded", "unavailable", "user_provided"] = "unavailable"
+
+    injected_path = _injected_pdf_path(paper, inject_pdfs_dir)
+    if injected_path is not None:
+        try:
+            pdf_bytes = injected_path.read_bytes()
+        except Exception as exc:  # noqa: BLE001
+            console.print(f"[yellow]Failed to read injected PDF:[/yellow] {injected_path} ({exc})")
+            pdf_bytes = None
+        if pdf_bytes is not None:
+            papers_dir.mkdir(parents=True, exist_ok=True)
+            target_path = papers_dir / f"{safe_filename(paper.paper_id)}.pdf"
+            target_path.write_bytes(pdf_bytes)
+            pdf_path = str(target_path)
+            pdf_status = "user_provided"
+            pdf_text = extract_text(pdf_bytes, keywords=keywords)
+    elif paper.open_access_pdf_url:
         pdf_bytes = download_pdf(paper.open_access_pdf_url)
         if pdf_bytes is not None:
-            papers_dir = Path(output_dir) / "papers"
             papers_dir.mkdir(parents=True, exist_ok=True)
-            (papers_dir / f"{paper.paper_id}.pdf").write_bytes(pdf_bytes)
-            pdf_downloaded = True
-            pdf_text = extract_text(
-                pdf_bytes,
-                first_pages=settings.pdf_first_pages,
-                last_pages=settings.pdf_last_pages,
-            )
+            target_path = papers_dir / f"{safe_filename(paper.paper_id)}.pdf"
+            target_path.write_bytes(pdf_bytes)
+            pdf_path = str(target_path)
+            pdf_status = "downloaded"
+            pdf_text = extract_text(pdf_bytes, keywords=keywords)
+
+    data_completeness: Literal["full", "abstract_only", "metadata_only"] = "metadata_only"
+    if paper.abstract and pdf_text:
+        data_completeness = "full"
+    elif paper.abstract:
+        data_completeness = "abstract_only"
+
+    updated_paper = paper.model_copy(
+        update={
+            "pdf_status": pdf_status,
+            "pdf_path": pdf_path,
+            "data_completeness": data_completeness,
+        }
+    )
 
     extracted_text = pdf_text or "Only abstract-level information is available."
     user_content = "\n".join(
@@ -135,46 +253,59 @@ def _analyze_paper(
         response = call_llm(settings, prompt, user_content)
     except LLMError as exc:
         console.print(f"[yellow]Analysis failed:[/yellow] {paper.title} ({exc})")
-        return (None, pdf_downloaded)
+        return (None, updated_paper)
 
-    try:
-        payload = json.loads(response)
-        return (
-            AnalysisResult(
-                paper_id=paper.paper_id,
-                summary=payload["summary"],
-                key_findings=payload.get("key_findings", []),
-                methodology=payload["methodology"],
-                relevance_score=payload["relevance_score"],
-                relevance_rationale=payload["relevance_rationale"],
-            ),
-            pdf_downloaded,
-        )
-    except json.JSONDecodeError:
+    payload = parse_llm_json(response, _AnalysisPayload, console=console)
+    if payload is None:
         console.print(f"[yellow]JSON parse failed:[/yellow] {paper.title}")
-        return (None, pdf_downloaded)
+        return (None, updated_paper)
+
+    return (AnalysisResult(paper_id=paper.paper_id, **payload), updated_paper)
 
 
-def run(state: PipelineState, settings: Settings) -> PipelineState:
+class PauseForPDFsError(Exception):
+    """Raised when pipeline should pause after screening for manual PDF injection."""
+
+    def __init__(self, papers_needing_pdfs: list[Paper], state_path: str) -> None:
+        self.papers_needing_pdfs = papers_needing_pdfs
+        self.state_path = state_path
+        super().__init__(f"{len(papers_needing_pdfs)} papers need manual PDFs")
+
+
+def run(
+    state: PipelineState,
+    settings: Settings,
+    inject_pdfs_dir: Path | None = None,
+    stop_after_screening: bool = False,
+) -> PipelineState:
     """Screen candidate papers and analyze the relevant ones."""
     screening_prompt = load_prompt("screening")
+    screening_fallback_prompt = load_prompt("screening_fallback")
     analysis_prompt = load_prompt("analysis")
+    if inject_pdfs_dir is not None and not inject_pdfs_dir.exists():
+        console.print(
+            "[yellow]Inject PDFs directory not found:[/yellow] "
+            f"{inject_pdfs_dir}. Continuing without injection."
+        )
+        inject_pdfs_dir = None
+
     papers_by_id = {paper.paper_id: paper for paper in state.candidates}
 
     screening_results: list[ScreeningResult] = []
     screened_papers: list[tuple[Paper, ScreeningResult, int]] = []
     for index, paper in enumerate(track(state.candidates, description="Screening papers")):
+        pdf_excerpt = None
         if not paper.abstract:
-            screening_results.append(
-                ScreeningResult(
-                    paper_id=paper.paper_id,
-                    relevance_score=0,
-                    rationale="no abstract available",
-                )
-            )
-            continue
+            pdf_excerpt = _screening_pdf_excerpt(paper, state.questions, inject_pdfs_dir)
 
-        screening_result = _screen_paper(paper, state.questions, settings, screening_prompt)
+        screening_result = _screen_paper(
+            paper,
+            state.questions,
+            settings,
+            screening_prompt,
+            screening_fallback_prompt,
+            pdf_excerpt=pdf_excerpt,
+        )
         if screening_result is None:
             continue
 
@@ -183,17 +314,52 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
 
     passed_papers = _select_papers_for_analysis(screened_papers, settings)
 
+    # Check if we should stop after screening for manual PDF injection
+    if stop_after_screening:
+        papers_needing_pdfs = [
+            paper
+            for paper in passed_papers
+            if paper.pdf_status in ("unavailable", "not_attempted")
+            and not paper.open_access_pdf_url
+            and not _injected_pdf_path(paper, inject_pdfs_dir)
+        ]
+
+        if papers_needing_pdfs:
+            console.print(
+                "\n[bold yellow]"
+                f"{len(papers_needing_pdfs)} papers passed screening but need PDFs:[/bold yellow]"
+            )
+            for i, paper in enumerate(papers_needing_pdfs[:10], 1):
+                console.print(f"  {i}. {paper.title}")
+                console.print(f"     ID: {paper.paper_id}")
+                if paper.doi:
+                    console.print(f"     DOI: {paper.doi}")
+                console.print()
+
+            if len(papers_needing_pdfs) > 10:
+                console.print(f"  ... and {len(papers_needing_pdfs) - 10} more\n")
+
+            console.print("[bold]Options:[/bold]")
+            console.print("  1. Source these PDFs manually, then resume with:")
+            console.print(
+                f"     litresearch resume {state.output_dir}/state.json --inject-pdfs <path>"
+            )
+            console.print("  2. Continue without PDFs (analysis will use abstracts only):")
+            console.print(f"     litresearch resume {state.output_dir}/state.json\n")
+
+            raise PauseForPDFsError(papers_needing_pdfs, state.output_dir)
+
     analyses: list[AnalysisResult] = []
     for paper in track(passed_papers, description="Analyzing papers"):
-        analysis_result, pdf_downloaded = _analyze_paper(
+        analysis_result, updated_paper = _analyze_paper(
             paper,
             state.questions,
             settings,
             analysis_prompt,
             state.output_dir,
+            inject_pdfs_dir,
         )
-        if pdf_downloaded:
-            papers_by_id[paper.paper_id] = paper.model_copy(update={"pdf_downloaded": True})
+        papers_by_id[paper.paper_id] = updated_paper
         if analysis_result is not None:
             analyses.append(analysis_result)
 

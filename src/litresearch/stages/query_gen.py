@@ -1,11 +1,14 @@
 """Stage 1: query generation."""
 
-import json
+from rich.console import Console
 
 from litresearch.config import Settings
 from litresearch.llm import LLMError, call_llm
 from litresearch.models import Facet, PipelineState, SearchQuery
 from litresearch.prompts import load_prompt
+from litresearch.utils import parse_llm_json
+
+console = Console()
 
 
 def run(state: PipelineState, settings: Settings) -> PipelineState:
@@ -18,7 +21,9 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
         response = call_llm(settings, prompt, user_content)
     except LLMError as exc:
         raise LLMError(f"Query generation failed: {exc}") from exc
-    payload = json.loads(response)
+    payload = parse_llm_json(response, console=console)
+    if payload is None:
+        raise LLMError("Query generation returned invalid JSON")
 
     facets = [Facet.model_validate(item) for item in payload.get("facets", [])]
     search_queries = [
