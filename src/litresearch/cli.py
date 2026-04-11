@@ -116,6 +116,12 @@ def resume(
         int | None,
         typer.Option("--threshold", help="Override the screening threshold."),
     ] = None,
+    inject_pdfs: Annotated[
+        Path | None,
+        typer.Option(
+            "--inject-pdfs", help="Directory containing PDFs to inject by paper_id or DOI"
+        ),
+    ] = None,
 ) -> None:
     """Resume the literature research pipeline from saved state."""
     settings = _build_settings(
@@ -123,9 +129,10 @@ def resume(
         top_n=top_n,
         output_dir=output_dir,
         threshold=threshold,
+        inject_pdf_dir=str(inject_pdfs) if inject_pdfs is not None else None,
     )
 
-    state = run_pipeline([], settings, resume_path=Path(state_file))
+    state = run_pipeline([], settings, resume_path=Path(state_file), inject_pdfs_dir=inject_pdfs)
     console.print(f"[green]Resume complete.[/green] Output: {state.output_dir}")
 
 

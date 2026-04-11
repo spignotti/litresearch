@@ -88,14 +88,26 @@ def _injected_pdf_path(paper: Paper, inject_pdfs_dir: Path | None) -> Path | Non
     if inject_pdfs_dir is None:
         return None
 
-    for candidate in [paper.paper_id, safe_filename(paper.paper_id)]:
-        candidate_path = inject_pdfs_dir / f"{candidate}.pdf"
+    inject_dir_resolved = inject_pdfs_dir.resolve()
+
+    for candidate in [safe_filename(paper.paper_id)]:
+        candidate_path = (inject_dir_resolved / f"{candidate}.pdf").resolve()
+        if (
+            inject_dir_resolved not in candidate_path.parents
+            and candidate_path != inject_dir_resolved
+        ):
+            continue
         if candidate_path.exists():
             return candidate_path
 
     if paper.doi:
-        for candidate in [paper.doi, safe_filename(paper.doi), paper.doi.replace("/", "_")]:
-            candidate_path = inject_pdfs_dir / f"{candidate}.pdf"
+        for candidate in [safe_filename(paper.doi)]:
+            candidate_path = (inject_dir_resolved / f"{candidate}.pdf").resolve()
+            if (
+                inject_dir_resolved not in candidate_path.parents
+                and candidate_path != inject_dir_resolved
+            ):
+                continue
             if candidate_path.exists():
                 return candidate_path
 
@@ -105,6 +117,7 @@ def _injected_pdf_path(paper: Paper, inject_pdfs_dir: Path | None) -> Path | Non
 def _screening_pdf_excerpt(
     paper: Paper,
     questions: list[str],
+    settings: Settings,
     inject_pdfs_dir: Path | None,
 ) -> str | None:
     keywords = _build_keywords(questions, paper.title)
@@ -116,12 +129,16 @@ def _screening_pdf_excerpt(
         except Exception:  # noqa: BLE001
             pdf_bytes = None
         if pdf_bytes is not None:
-            return extract_text(pdf_bytes, token_budget=1200, keywords=keywords)
+            return extract_text(
+                pdf_bytes, token_budget=settings.pdf_token_budget, keywords=keywords
+            )
 
     if paper.open_access_pdf_url:
         pdf_bytes = download_pdf(paper.open_access_pdf_url)
         if pdf_bytes is not None:
-            return extract_text(pdf_bytes, token_budget=1200, keywords=keywords)
+            return extract_text(
+                pdf_bytes, token_budget=settings.pdf_token_budget, keywords=keywords
+            )
 
     return None
 
@@ -149,6 +166,8 @@ def _screen_paper(
             ]
         )
     else:
+        if not settings.abstract_fallback:
+            return None
         selected_prompt = fallback_prompt
         user_content = "\n".join(
             [
@@ -207,7 +226,9 @@ def _analyze_paper(
             target_path.write_bytes(pdf_bytes)
             pdf_path = str(target_path)
             pdf_status = "user_provided"
-            pdf_text = extract_text(pdf_bytes, keywords=keywords)
+            pdf_text = extract_text(
+                pdf_bytes, token_budget=settings.pdf_token_budget, keywords=keywords
+            )
     elif paper.open_access_pdf_url:
         pdf_bytes = download_pdf(paper.open_access_pdf_url)
         if pdf_bytes is not None:
@@ -216,7 +237,9 @@ def _analyze_paper(
             target_path.write_bytes(pdf_bytes)
             pdf_path = str(target_path)
             pdf_status = "downloaded"
-            pdf_text = extract_text(pdf_bytes, keywords=keywords)
+            pdf_text = extract_text(
+                pdf_bytes, token_budget=settings.pdf_token_budget, keywords=keywords
+            )
 
     data_completeness: Literal["full", "abstract_only", "metadata_only"] = "metadata_only"
     if paper.abstract and pdf_text:
@@ -296,7 +319,7 @@ def run(
     for index, paper in enumerate(track(state.candidates, description="Screening papers")):
         pdf_excerpt = None
         if not paper.abstract:
-            pdf_excerpt = _screening_pdf_excerpt(paper, state.questions, inject_pdfs_dir)
+            pdf_excerpt = _screening_pdf_excerpt(paper, state.questions, settings, inject_pdfs_dir)
 
         screening_result = _screen_paper(
             paper,

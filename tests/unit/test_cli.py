@@ -44,3 +44,5 @@ def test_resume_help_shows_expected_options() -> None:
     assert "final top-N cutoff" in output
     assert "output directory" in output
     assert "screening threshold" in output
+    assert "--inject-pdfs" in output
+    assert "Directory containing PDFs" in output

@@ -1,5 +1,6 @@
 """Citation graph expansion stage."""
 
+import time
 from typing import Any
 
 from rich.console import Console
@@ -77,11 +78,21 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     reference_counts: dict[str, int] = {}
     reference_papers: dict[str, Paper] = {}
 
+    min_interval = (
+        1.0 / settings.s2_requests_per_second if settings.s2_requests_per_second > 0 else 0.0
+    )
+    last_request_at: float | None = None
+
     console.print(
         f"[bold blue]Expanding citations for {len(top_paper_ids)} top papers...[/bold blue]"
     )
 
     for paper_id in track(top_paper_ids, description="Fetching references"):
+        if last_request_at is not None and min_interval > 0:
+            elapsed = time.monotonic() - last_request_at
+            if elapsed < min_interval:
+                time.sleep(min_interval - elapsed)
+
         try:
 
             @retry_with_backoff(
@@ -92,6 +103,7 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
                 return scholar.get_paper_references(current_paper_id, limit=100)
 
             references = fetch_references()
+            last_request_at = time.monotonic()
             items = getattr(references, "items", references)
 
             for reference in items:
@@ -112,6 +124,7 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
                         reference_papers[ref_id] = paper
 
         except Exception as exc:  # noqa: BLE001
+            last_request_at = time.monotonic()
             console.print(f"[yellow]Failed to fetch references for {paper_id}:[/yellow] {exc}")
             continue
 
