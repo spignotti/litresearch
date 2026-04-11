@@ -1,5 +1,6 @@
 """Thin LiteLLM wrapper for the project's shared call pattern."""
 
+import re
 from typing import Any, cast
 
 from litellm import completion
@@ -13,6 +14,21 @@ console = Console()
 
 class LLMError(Exception):
     """Raised when an LLM request fails."""
+
+
+def _sanitize_error(error: Exception) -> str:
+    """Remove potentially sensitive info from error messages."""
+    msg = str(error)
+    # Redact common secret patterns
+    msg = re.sub(r"sk-[a-zA-Z0-9]{20,}", "[REDACTED]", msg)
+    msg = re.sub(r"Bearer [a-zA-Z0-9\-_]+", "Bearer [REDACTED]", msg)
+    msg = re.sub(
+        r'(api_key|key|token|password|secret)\s*["\']?\s*[:=]\s*["\']?[^"\'\s,]+',
+        r"\1=[REDACTED]",
+        msg,
+        flags=re.IGNORECASE,
+    )
+    return msg
 
 
 def call_llm(
@@ -46,8 +62,9 @@ def call_llm(
         )(completion)
         response = cast(Any, completion_with_retry(**completion_kwargs))
     except Exception as exc:  # noqa: BLE001
-        console.print(f"[red]LLM request failed:[/red] {exc}")
-        raise LLMError(str(exc)) from exc
+        sanitized = _sanitize_error(exc)
+        console.print(f"[red]LLM request failed:[/red] {sanitized}")
+        raise LLMError(sanitized) from exc
 
     content = response.choices[0].message.content
     if not isinstance(content, str):

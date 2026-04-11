@@ -2,7 +2,56 @@ import json
 
 from litresearch.config import Settings
 from litresearch.models import Paper, PipelineState, ScreeningResult
-from litresearch.stages.analysis import run
+from litresearch.stages.analysis import _injected_pdf_path, run
+
+
+def test_injected_pdf_path_rejects_path_traversal(tmp_path) -> None:
+    """Test that path traversal attempts are rejected in PDF injection."""
+    inject_dir = tmp_path / "pdfs"
+    inject_dir.mkdir()
+
+    # Create a safe PDF file
+    safe_paper = Paper(
+        paper_id="safe_paper",
+        title="Safe Paper",
+        abstract="Abstract",
+        authors=[],
+        year=2024,
+        citation_count=10,
+        source="s2",
+    )
+    (inject_dir / "safe_paper.pdf").write_bytes(b"%PDF-1.0")
+
+    # Test that safe path works
+    result = _injected_pdf_path(safe_paper, inject_dir)
+    assert result is not None
+    assert result.name == "safe_paper.pdf"
+
+    # Test path traversal attempt with malicious paper_id
+    malicious_paper = Paper(
+        paper_id="../../../etc/passwd",
+        title="Malicious Paper",
+        abstract="Abstract",
+        authors=[],
+        year=2024,
+        citation_count=0,
+        source="s2",
+    )
+    result = _injected_pdf_path(malicious_paper, inject_dir)
+    assert result is None
+
+    # Test path traversal with null bytes
+    null_byte_paper = Paper(
+        paper_id="safe\x00../../../etc/passwd",
+        title="Null Byte Paper",
+        abstract="Abstract",
+        authors=[],
+        year=2024,
+        citation_count=0,
+        source="s2",
+    )
+    result = _injected_pdf_path(null_byte_paper, inject_dir)
+    assert result is None
 
 
 def test_analysis_saves_pdf_and_marks_candidate_downloaded(tmp_path, monkeypatch) -> None:

@@ -68,6 +68,9 @@ class Settings(BaseSettings):
 
     pdf_first_pages: int = 4
     pdf_last_pages: int = 2
+    pdf_extraction_mode: Literal["budget", "pages"] = "budget"
+    pdf_token_budget: int = 4000
+    abstract_fallback: bool = True
     inject_pdf_dir: str | None = None
     output_dir: str = "output"
 

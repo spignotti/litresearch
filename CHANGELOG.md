@@ -81,4 +81,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Dependencies
 - Added `pyalex>=0.15` for OpenAlex integration
 - Added `pyzotero>=1.6` for Zotero export
-- Added `rapidfuzz` for fuzzy title matching (optional, falls back to difflib)
+- Added optional `rapidfuzz` dependency for fuzzy title matching (falls back to difflib)
