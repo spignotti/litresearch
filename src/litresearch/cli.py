@@ -103,7 +103,12 @@ def run(
         inject_pdfs_dir=inject_pdfs,
         stop_after_screening=stop_after_screening,
     )
-    console.print(f"[green]Run complete.[/green] Output: {state.output_dir}")
+    if state.screened_papers_completed and not state.analyses:
+        console.print(
+            f"[yellow]Pipeline paused at screening checkpoint.[/yellow] Output: {state.output_dir}"
+        )
+    else:
+        console.print(f"[green]Run complete.[/green] Output: {state.output_dir}")
 
 
 @app.command()

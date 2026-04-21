@@ -289,9 +289,15 @@ def _analyze_paper(
 class PauseForPDFsError(Exception):
     """Raised when pipeline should pause after screening for manual PDF injection."""
 
-    def __init__(self, papers_needing_pdfs: list[Paper], state_path: str) -> None:
+    def __init__(
+        self,
+        papers_needing_pdfs: list[Paper],
+        state_path: str,
+        screening_results: list[ScreeningResult] | None = None,
+    ) -> None:
         self.papers_needing_pdfs = papers_needing_pdfs
         self.state_path = state_path
+        self.screening_results = screening_results or []
         super().__init__(f"{len(papers_needing_pdfs)} papers need manual PDFs")
 
 
@@ -314,26 +320,43 @@ def run(
 
     papers_by_id = {paper.paper_id: paper for paper in state.candidates}
 
-    screening_results: list[ScreeningResult] = []
-    screened_papers: list[tuple[Paper, ScreeningResult, int]] = []
-    for index, paper in enumerate(track(state.candidates, description="Screening papers")):
-        pdf_excerpt = None
-        if not paper.abstract:
-            pdf_excerpt = _screening_pdf_excerpt(paper, state.questions, settings, inject_pdfs_dir)
-
-        screening_result = _screen_paper(
-            paper,
-            state.questions,
-            settings,
-            screening_prompt,
-            screening_fallback_prompt,
-            pdf_excerpt=pdf_excerpt,
+    if state.screened_papers_completed and state.screening_results:
+        screening_results = state.screening_results
+        screened_papers = [
+            (
+                papers_by_id[result.paper_id],
+                result,
+                idx,
+            )
+            for idx, result in enumerate(screening_results)
+            if result.paper_id in papers_by_id
+        ]
+        console.print(
+            f"[dim]Screening already completed ({len(screening_results)} papers). Skipping.[/dim]"
         )
-        if screening_result is None:
-            continue
+    else:
+        screening_results: list[ScreeningResult] = []
+        screened_papers: list[tuple[Paper, ScreeningResult, int]] = []
+        for index, paper in enumerate(track(state.candidates, description="Screening papers")):
+            pdf_excerpt = None
+            if not paper.abstract:
+                pdf_excerpt = _screening_pdf_excerpt(
+                    paper, state.questions, settings, inject_pdfs_dir
+                )
 
-        screening_results.append(screening_result)
-        screened_papers.append((paper, screening_result, index))
+            screening_result = _screen_paper(
+                paper,
+                state.questions,
+                settings,
+                screening_prompt,
+                screening_fallback_prompt,
+                pdf_excerpt=pdf_excerpt,
+            )
+            if screening_result is None:
+                continue
+
+            screening_results.append(screening_result)
+            screened_papers.append((paper, screening_result, index))
 
     passed_papers = _select_papers_for_analysis(screened_papers, settings)
 
@@ -370,7 +393,7 @@ def run(
             console.print("  2. Continue without PDFs (analysis will use abstracts only):")
             console.print(f"     litresearch resume {state.output_dir}/state.json\n")
 
-            raise PauseForPDFsError(papers_needing_pdfs, state.output_dir)
+            raise PauseForPDFsError(papers_needing_pdfs, state.output_dir, screening_results)
 
     analyses: list[AnalysisResult] = []
     for paper in track(passed_papers, description="Analyzing papers"):
@@ -392,6 +415,7 @@ def run(
         update={
             "candidates": updated_candidates,
             "screening_results": screening_results,
+            "screened_papers_completed": True,
             "analyses": analyses,
             "current_stage": "analysis",
         }

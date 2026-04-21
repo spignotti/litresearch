@@ -159,6 +159,7 @@ class PipelineState(BaseModel):
     screening_results: list[ScreeningResult] = Field(default_factory=list)
     analyses: list[AnalysisResult] = Field(default_factory=list)
     ranked_paper_ids: list[str] = Field(default_factory=list)
+    screened_papers_completed: bool = False
     current_stage: str
     output_dir: str
     created_at: str
