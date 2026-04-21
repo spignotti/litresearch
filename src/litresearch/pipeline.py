@@ -126,7 +126,17 @@ def run_pipeline(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     state_path = output_dir / "state.json"
-    metrics = RunMetrics(run_id=f"run-{uuid.uuid4().hex[:12]}", started_at=started_at)
+    metrics_path = output_dir / "metrics.json"
+
+    # Preserve existing metrics when resuming
+    if resume_path is not None and metrics_path.exists():
+        try:
+            metrics = RunMetrics.model_validate_json(metrics_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            metrics = RunMetrics(run_id=f"run-{uuid.uuid4().hex[:12]}", started_at=started_at)
+    else:
+        metrics = RunMetrics(run_id=f"run-{uuid.uuid4().hex[:12]}", started_at=started_at)
+
     effective_inject_pdfs_dir = inject_pdfs_dir
     if effective_inject_pdfs_dir is None and settings.inject_pdf_dir:
         effective_inject_pdfs_dir = Path(settings.inject_pdf_dir)
@@ -164,18 +174,21 @@ def run_pipeline(
             state.save(state_path)
             metrics = _populate_aggregate_metrics(metrics, state)
             _write_metrics(output_dir, metrics)
-        except PauseForPDFsError:
+        except PauseForPDFsError as pause_exc:
             # Not a failure - user chose to pause for manual PDF injection
-            # Save state at screening checkpoint
+            # Preserve screening results and mark screening as completed
             checkpoint_state = state.model_copy(
                 update={
+                    "screening_results": pause_exc.screening_results,
+                    "screened_papers_completed": True,
                     "updated_at": _timestamp(),
                 }
             )
             checkpoint_state.save(state_path)
             console.print("\n[bold yellow]Pipeline paused at screening checkpoint.[/bold yellow]")
             console.print(f"State saved to: {state_path}")
-            return state  # Return current state
+            state = checkpoint_state
+            return state
         except Exception as exc:  # noqa: BLE001
             stage_metrics = stage_metrics.model_copy(
                 update={

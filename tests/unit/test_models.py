@@ -14,6 +14,7 @@ def test_pipeline_state_save_load_roundtrip(tmp_path: Path) -> None:
         output_dir="output/run-1",
         created_at="2026-03-09T16:00:00Z",
         updated_at="2026-03-09T16:05:00Z",
+        screened_papers_completed=True,
     )
 
     path = tmp_path / "state.json"
@@ -22,6 +23,7 @@ def test_pipeline_state_save_load_roundtrip(tmp_path: Path) -> None:
     loaded = PipelineState.load(path)
 
     assert loaded == state
+    assert loaded.screened_papers_completed is True
 
 
 def test_paper_from_s2_normalizes_fields() -> None:
