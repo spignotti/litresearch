@@ -3,7 +3,12 @@
 from typing import Literal
 
 from pydantic import computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict, TomlConfigSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
 
 
 class Settings(BaseSettings):
@@ -19,11 +24,11 @@ class Settings(BaseSettings):
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
-        init_settings,
-        env_settings,
-        dotenv_settings,
-        file_secret_settings,
-    ):
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Load settings from init, env, dotenv, TOML, then secrets."""
         return (
             init_settings,

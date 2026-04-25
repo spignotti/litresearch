@@ -38,3 +38,4 @@ htmlcov/
 output-smoke/
 litresearch.toml
 .opencode/LESSONS.md
+.opencode/PROJECT_STATE.md
