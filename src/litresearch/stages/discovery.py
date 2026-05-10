@@ -27,7 +27,6 @@ SEARCH_FIELDS = [
     "year",
     "citationCount",
     "venue",
-    "openAccessPdf",
     "externalIds",
     "citationStyles",
 ]
@@ -67,8 +66,6 @@ def _title_similarity(left: str, right: str) -> float:
 def _metadata_score(paper: Paper) -> int:
     score = 0
     if paper.abstract:
-        score += 4
-    if paper.open_access_pdf_url:
         score += 4
     if paper.doi:
         score += 2
@@ -116,7 +113,6 @@ def _merge_papers(existing: Paper, incoming: Paper) -> Paper:
             "citation_count": max(existing.citation_count, incoming.citation_count),
             "venue": primary.venue or secondary.venue,
             "doi": _normalize_doi(primary.doi) or _normalize_doi(secondary.doi),
-            "open_access_pdf_url": primary.open_access_pdf_url or secondary.open_access_pdf_url,
             "bibtex": primary.bibtex or secondary.bibtex,
             "corpus_id": primary.corpus_id
             if primary.corpus_id is not None

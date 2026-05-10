@@ -38,7 +38,6 @@ def _paper_from_cited_data(cited: dict[str, Any]) -> Paper | None:
             authors.append(name)
 
     external_ids = _as_dict(cited.get("externalIds") or cited.get("external_ids") or {})
-    open_access_pdf = _as_dict(cited.get("openAccessPdf") or cited.get("open_access_pdf") or {})
 
     return Paper(
         paper_id=paper_id,
@@ -49,7 +48,6 @@ def _paper_from_cited_data(cited: dict[str, Any]) -> Paper | None:
         citation_count=cited.get("citationCount") or cited.get("citation_count") or 0,
         venue=cited.get("venue"),
         doi=external_ids.get("DOI"),
-        open_access_pdf_url=open_access_pdf.get("url"),
         source="citation_expansion",
     )
 
@@ -75,6 +73,7 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
     top_paper_ids = state.ranked_paper_ids[: settings.top_n]
     existing_ids = {paper.paper_id for paper in state.candidates}
 
+    in_set_reference_counts: dict[str, int] = {}
     reference_counts: dict[str, int] = {}
     reference_papers: dict[str, Paper] = {}
 
@@ -114,6 +113,7 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
                     continue
 
                 if ref_id in existing_ids:
+                    in_set_reference_counts[ref_id] = in_set_reference_counts.get(ref_id, 0) + 1
                     continue
 
                 reference_counts[ref_id] = reference_counts.get(ref_id, 0) + 1
@@ -138,9 +138,19 @@ def run(state: PipelineState, settings: Settings) -> PipelineState:
 
     console.print(f"[green]Found {len(expanded_papers)} frequently referenced works[/green]")
 
+    if settings.enable_foundational_detection:
+        foundational = sorted(in_set_reference_counts.items(), key=lambda x: -x[1])[
+            : settings.foundational_papers_count
+        ]
+        foundational_paper_ids = [pid for pid, _ in foundational]
+        console.print(f"[green]Found {len(foundational_paper_ids)} foundational papers[/green]")
+    else:
+        foundational_paper_ids = []
+
     return state.model_copy(
         update={
             "candidates": [*state.candidates, *expanded_papers],
+            "foundational_paper_ids": foundational_paper_ids,
             "current_stage": "citation_expansion",
         }
     )

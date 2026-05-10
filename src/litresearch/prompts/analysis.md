@@ -26,4 +26,4 @@ Your task is to produce a structured analysis of a paper using the provided meta
 The user will provide:
 - research questions
 - paper metadata
-- extracted PDF text or a note that only abstract-level information is available
+- extracted paper text or a note that only abstract-level information is available

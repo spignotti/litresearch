@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     max_retries: int = 3
     retry_base_delay: float = 1.0
     llm_timeout: int = 120
-    default_model: str = "openai/gpt-4o-mini"
+    default_model: str = "openai/gpt-5.4-mini"
     screening_selection_mode: Literal["top_percent", "threshold", "top_k"] = "top_percent"
     screening_top_percent: float = 0.3  # 0-1; used when screening_selection_mode=top_percent
     screening_top_k: int | None = None  # used when screening_selection_mode=top_k
@@ -54,9 +54,16 @@ class Settings(BaseSettings):
     discovery_sources: list[str] = ["s2"]
     openalex_email: str | None = None
 
+    # Query expansion
+    enable_query_expansion: bool = True
+    max_expansion_queries: int = 2
+    expansion_candidate_sample: int = 30
+
     # Citation expansion
     expand_citations: bool = False
     min_cross_refs: int = 3
+    enable_foundational_detection: bool = True
+    foundational_papers_count: int = 5
 
     # Zotero export
     zotero_library_id: str | None = None
@@ -66,12 +73,6 @@ class Settings(BaseSettings):
     zotero_tag: str | None = None
     zotero_export: bool = False
 
-    pdf_first_pages: int = 4
-    pdf_last_pages: int = 2
-    pdf_extraction_mode: Literal["budget", "pages"] = "budget"
-    pdf_token_budget: int = 4000
-    abstract_fallback: bool = True
-    inject_pdf_dir: str | None = None
     output_dir: str = "output"
 
     @computed_field

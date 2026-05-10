@@ -13,7 +13,6 @@ def minimal_state(tmp_path) -> PipelineState:
             Paper(
                 paper_id="p1",
                 title="One",
-                open_access_pdf_url="https://example.com/p1.pdf",
             )
         ],
         analyses=[
@@ -37,7 +36,6 @@ def minimal_state(tmp_path) -> PipelineState:
 def test_export_writes_report(minimal_state, monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("litresearch.stages.export.load_prompt", lambda _: "")
     monkeypatch.setattr("litresearch.stages.export.call_llm", lambda *a, **kw: "synthesis")
-    monkeypatch.setattr("litresearch.stages.export.download_pdf", lambda _: None)
 
     run(minimal_state, Settings())
 

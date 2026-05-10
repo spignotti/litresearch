@@ -37,7 +37,6 @@ def test_paper_from_s2_normalizes_fields() -> None:
         citationCount=12,
         venue="ICSE",
         externalIds={"DOI": "10.1234/example"},
-        openAccessPdf={"url": "https://example.com/paper.pdf"},
         citationStyles={"bibtex": "@article{example}"},
     )
 
@@ -46,7 +45,6 @@ def test_paper_from_s2_normalizes_fields() -> None:
     assert paper.paper_id == "paper-123"
     assert paper.authors == ["Ada Lovelace", "Alan Turing"]
     assert paper.doi == "10.1234/example"
-    assert paper.open_access_pdf_url == "https://example.com/paper.pdf"
     assert paper.bibtex == "@article{example}"
 
 

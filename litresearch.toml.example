@@ -96,6 +96,19 @@ abstract_fallback = true
 # inject_pdf_dir = "/path/to/pdfs"
 
 # ============================================================================
+# Query Expansion (Optional)
+# ============================================================================
+
+# Enable iterative query expansion after initial enrichment
+enable_query_expansion = true
+
+# Maximum number of expansion queries to generate
+max_expansion_queries = 2
+
+# Number of top candidates (by citation count) to sample for expansion analysis
+expansion_candidate_sample = 30
+
+# ============================================================================
 # Citation Expansion (Optional)
 # ============================================================================
 
@@ -104,6 +117,12 @@ expand_citations = false
 
 # Minimum number of cross-references required to include a paper
 min_cross_refs = 3
+
+# Enable foundational paper detection (papers cited by many candidates)
+enable_foundational_detection = true
+
+# Number of foundational papers to identify
+foundational_papers_count = 5
 
 # ============================================================================
 # Zotero Export (Optional)

@@ -15,10 +15,10 @@ from litresearch.stages import (
     discovery,
     enrichment,
     export,
+    query_expansion,
     query_gen,
     ranking,
 )
-from litresearch.stages.analysis import PauseForPDFsError
 
 console = Console()
 
@@ -72,16 +72,9 @@ def _populate_aggregate_metrics(metrics: RunMetrics, state: PipelineState) -> Ru
             "total_analyzed": len(state.analyses),
             "total_exported": len(state.ranked_paper_ids),
             "citation_expanded": source_counts.get("citation_expansion", 0),
+            "expansion_queries_generated": metrics.expansion_queries_generated,
+            "foundational_papers": len(state.foundational_paper_ids),
             "sources": source_counts,
-            "pdfs_downloaded": sum(
-                1 for paper in state.candidates if paper.pdf_status == "downloaded"
-            ),
-            "pdfs_user_provided": sum(
-                1 for paper in state.candidates if paper.pdf_status == "user_provided"
-            ),
-            "pdfs_unavailable": sum(
-                1 for paper in state.candidates if paper.pdf_status == "unavailable"
-            ),
         }
     )
 
@@ -91,8 +84,6 @@ def run_pipeline(
     settings: Settings,
     resume_path: Path | None = None,
     overwrite: bool = False,
-    inject_pdfs_dir: Path | None = None,
-    stop_after_screening: bool = False,
 ) -> PipelineState:
     """Run the configured pipeline from scratch or from a saved state."""
     start_time = time.perf_counter()
@@ -137,10 +128,6 @@ def run_pipeline(
     else:
         metrics = RunMetrics(run_id=f"run-{uuid.uuid4().hex[:12]}", started_at=started_at)
 
-    effective_inject_pdfs_dir = inject_pdfs_dir
-    if effective_inject_pdfs_dir is None and settings.inject_pdf_dir:
-        effective_inject_pdfs_dir = Path(settings.inject_pdf_dir)
-
     for stage_name in STAGE_ORDER[start_index:]:
         console.print(f"[bold blue]Running stage:[/bold blue] {stage_name}")
         started = time.perf_counter()
@@ -151,14 +138,7 @@ def run_pipeline(
         )
         stage_runner = STAGES[stage_name]
         try:
-            if stage_name == "analysis":
-                state = stage_runner(
-                    state,
-                    settings,
-                    inject_pdfs_dir=effective_inject_pdfs_dir,
-                    stop_after_screening=stop_after_screening,
-                )
-            elif stage_name == "export":
+            if stage_name == "export":
                 state = stage_runner(state, settings, run_metrics=metrics)
             else:
                 state = stage_runner(state, settings)
@@ -174,21 +154,6 @@ def run_pipeline(
             state.save(state_path)
             metrics = _populate_aggregate_metrics(metrics, state)
             _write_metrics(output_dir, metrics)
-        except PauseForPDFsError as pause_exc:
-            # Not a failure - user chose to pause for manual PDF injection
-            # Preserve screening results and mark screening as completed
-            checkpoint_state = state.model_copy(
-                update={
-                    "screening_results": pause_exc.screening_results,
-                    "screened_papers_completed": True,
-                    "updated_at": _timestamp(),
-                }
-            )
-            checkpoint_state.save(state_path)
-            console.print("\n[bold yellow]Pipeline paused at screening checkpoint.[/bold yellow]")
-            console.print(f"State saved to: {state_path}")
-            state = checkpoint_state
-            return state
         except Exception as exc:  # noqa: BLE001
             stage_metrics = stage_metrics.model_copy(
                 update={
@@ -207,6 +172,89 @@ def run_pipeline(
             raise
         elapsed = time.perf_counter() - started
         console.print(f"[green]Completed[/green] {stage_name} in {elapsed:.2f}s")
+
+        # --- Post-enrichment: Iterative Query Expansion ---
+        if (
+            stage_name == "enrichment"
+            and settings.enable_query_expansion
+            and not state.query_expansion_run
+        ):
+            queries_before = len(state.search_queries)
+
+            console.print("[bold blue]Running stage:[/bold blue] query_expansion")
+            exp_started = time.perf_counter()
+            exp_stage_metrics = StageMetrics(
+                name="query_expansion",
+                started_at=_timestamp(),
+                input_count=len(state.candidates),
+            )
+            try:
+                state = query_expansion.run(state, settings)
+                queries_generated = len(state.search_queries) - queries_before
+                exp_stage_metrics = exp_stage_metrics.model_copy(
+                    update={
+                        "completed_at": _timestamp(),
+                        "duration_seconds": time.perf_counter() - exp_started,
+                        "output_count": queries_generated,
+                    }
+                )
+                metrics = metrics.model_copy(
+                    update={
+                        "stages": [*metrics.stages, exp_stage_metrics],
+                        "expansion_queries_generated": queries_generated,
+                    }
+                )
+                state = state.model_copy(update={"updated_at": _timestamp()})
+                state.save(state_path)
+                metrics = _populate_aggregate_metrics(metrics, state)
+                _write_metrics(output_dir, metrics)
+
+                if queries_generated > 0:
+                    console.print(
+                        f"[green]Generated {queries_generated} expansion queries,"
+                        f" re-running discovery and enrichment...[/green]"
+                    )
+                    for sub_stage in ["discovery", "enrichment"]:
+                        console.print(
+                            f"[bold blue]Running stage (expansion):[/bold blue] {sub_stage}"
+                        )
+                        sub_started = time.perf_counter()
+                        sub_metrics = StageMetrics(
+                            name=f"{sub_stage} (expansion)",
+                            started_at=_timestamp(),
+                            input_count=_stage_count(sub_stage, state),
+                        )
+                        try:
+                            state = STAGES[sub_stage](state, settings)
+                            sub_metrics = sub_metrics.model_copy(
+                                update={
+                                    "completed_at": _timestamp(),
+                                    "duration_seconds": time.perf_counter() - sub_started,
+                                    "output_count": _stage_count(sub_stage, state),
+                                }
+                            )
+                            metrics = metrics.model_copy(
+                                update={"stages": [*metrics.stages, sub_metrics]}
+                            )
+                            state = state.model_copy(update={"updated_at": _timestamp()})
+                            state.save(state_path)
+                            metrics = _populate_aggregate_metrics(metrics, state)
+                            _write_metrics(output_dir, metrics)
+                            sub_elapsed = time.perf_counter() - sub_started
+                            console.print(
+                                f"[green]Completed[/green] {sub_stage} (expansion)"
+                                f" in {sub_elapsed:.2f}s"
+                            )
+                        except Exception as sub_exc:  # noqa: BLE001
+                            console.print(
+                                f"[yellow]Expansion {sub_stage} failed"
+                                f" ({sub_exc}), continuing...[/yellow]"
+                            )
+                            break
+                else:
+                    console.print("[dim]Query expansion generated no new queries[/dim]")
+            except Exception as exc:  # noqa: BLE001
+                console.print(f"[yellow]Query expansion failed ({exc}), continuing...[/yellow]")
 
     metrics = _populate_aggregate_metrics(metrics, state)
     metrics = metrics.model_copy(

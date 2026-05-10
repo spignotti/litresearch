@@ -1,7 +1,6 @@
 """Tests for screening and analysis stage."""
 
 from collections.abc import Callable
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -34,8 +33,6 @@ class TestScreeningStage:
             questions: list[str],
             settings: Settings,
             prompt: str,
-            output_dir: str,
-            inject_pdfs_dir: Path | None = None,
         ) -> tuple[AnalysisResult | None, Paper]:
             analyzed_ids.append(paper.paper_id)
             return (
@@ -51,36 +48,6 @@ class TestScreeningStage:
             )
 
         return _stub
-
-    def test_paper_without_abstract_gets_zero_score(self, tmp_path, monkeypatch) -> None:
-        """Test that papers without abstract get screening result with score 0."""
-        settings = Settings(default_model="test-model", screening_selection_mode="top_percent")
-
-        paper_no_abstract = Paper(
-            paper_id="123",
-            title="Test Paper",
-            authors=["Author"],
-            year=2024,
-            abstract=None,
-        )
-
-        state = self._state_with_papers(tmp_path, [paper_no_abstract])
-
-        monkeypatch.setattr("litresearch.stages.analysis.load_prompt", lambda _name: "prompt")
-        monkeypatch.setattr(
-            "litresearch.stages.analysis._screen_paper",
-            lambda paper, questions, settings, prompt, fb_prompt, pdf_excerpt=None: ScreeningResult(
-                paper_id=paper.paper_id,
-                relevance_score=0,
-                rationale="no abstract available",
-            ),
-        )
-
-        result = run(state, settings)
-
-        assert len(result.screening_results) == 1
-        assert result.screening_results[0].relevance_score == 0
-        assert "no abstract available" in result.screening_results[0].rationale
 
     def test_top_percent_selection_analyzes_global_top_share(self, tmp_path, monkeypatch) -> None:
         """Test global top-percent selection after screening."""
@@ -98,7 +65,7 @@ class TestScreeningStage:
         monkeypatch.setattr("litresearch.stages.analysis.load_prompt", lambda _name: "prompt")
         monkeypatch.setattr(
             "litresearch.stages.analysis._screen_paper",
-            lambda paper, questions, settings, prompt, fb_prompt, pdf_excerpt=None: ScreeningResult(
+            lambda paper, questions, settings, prompt: ScreeningResult(
                 paper_id=paper.paper_id,
                 relevance_score=scores[paper.paper_id],
                 rationale="fit",
@@ -127,7 +94,7 @@ class TestScreeningStage:
         monkeypatch.setattr("litresearch.stages.analysis.load_prompt", lambda _name: "prompt")
         monkeypatch.setattr(
             "litresearch.stages.analysis._screen_paper",
-            lambda paper, questions, settings, prompt, fb_prompt, pdf_excerpt=None: ScreeningResult(
+            lambda paper, questions, settings, prompt: ScreeningResult(
                 paper_id=paper.paper_id,
                 relevance_score=scores[paper.paper_id],
                 rationale="fit",
@@ -156,7 +123,7 @@ class TestScreeningStage:
         monkeypatch.setattr("litresearch.stages.analysis.load_prompt", lambda _name: "prompt")
         monkeypatch.setattr(
             "litresearch.stages.analysis._screen_paper",
-            lambda paper, questions, settings, prompt, fb_prompt, pdf_excerpt=None: ScreeningResult(
+            lambda paper, questions, settings, prompt: ScreeningResult(
                 paper_id=paper.paper_id,
                 relevance_score=scores[paper.paper_id],
                 rationale="fit",
@@ -179,7 +146,7 @@ class TestScreeningStage:
         monkeypatch.setattr("litresearch.stages.analysis.load_prompt", lambda _name: "prompt")
         monkeypatch.setattr(
             "litresearch.stages.analysis._screen_paper",
-            lambda paper, questions, settings, prompt, fb_prompt, pdf_excerpt=None: ScreeningResult(
+            lambda paper, questions, settings, prompt: ScreeningResult(
                 paper_id=paper.paper_id,
                 relevance_score=90,
                 rationale="fit",
@@ -204,6 +171,6 @@ class TestScreeningStage:
         settings = Settings(default_model="test-model")
 
         with patch("litresearch.stages.analysis.call_llm", return_value="invalid json"):
-            result = _screen_paper(paper, ["question"], settings, "prompt", "fallback_prompt")
+            result = _screen_paper(paper, ["question"], settings, "prompt")
 
         assert result is None
