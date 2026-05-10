@@ -8,6 +8,17 @@ authors = [
     { name = "Silas Pignotti", email = "pignottisilas@gmail.com" },
 ]
 license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
 dependencies = [
     "httpx>=0.28.1",
     "litellm==1.82.6",
@@ -24,6 +35,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/spignotti/litresearch"
 Repository = "https://github.com/spignotti/litresearch"
+Documentation = "https://github.com/spignotti/litresearch#readme"
+Changelog = "https://github.com/spignotti/litresearch/blob/main/CHANGELOG.md"
+Issues = "https://github.com/spignotti/litresearch/issues"
 
 [project.scripts]
 litresearch = "litresearch.cli:main"
