@@ -94,7 +94,6 @@ class TestOpenAlexClient:
         assert paper.year == 2023
         assert paper.citation_count == 100
         assert paper.doi == "10.1234/test"
-        assert paper.open_access_pdf_url == "https://example.com/test.pdf"
         assert paper.venue == "Nature"
         assert paper.source == "openalex"
 

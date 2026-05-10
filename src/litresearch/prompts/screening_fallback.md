@@ -6,8 +6,6 @@ This paper does NOT have an abstract available. You must screen based on availab
 - Title (always available)
 - Venue name (if available)
 - Citation count and publication year (metadata signals)
-- Any available PDF text excerpt
-
 ## Scoring Guidance (BE CONSERVATIVE - bias toward inclusion)
 - 80-100: title/venue strongly suggests direct relevance to the research questions
 - 60-79: title/venue suggests likely relevance
@@ -30,4 +28,4 @@ This paper does NOT have an abstract available. You must screen based on availab
 ## Input
 The user will provide:
 - research questions
-- all available signals (title, venue, authors, year, citation count, any PDF excerpt)
+- all available signals (title, venue, authors, year, citation count)

@@ -20,7 +20,6 @@ def _build_settings(
     top_n: int | None = None,
     output_dir: str | None = None,
     threshold: int | None = None,
-    inject_pdf_dir: str | None = None,
 ) -> Settings:
     """Load settings and apply CLI overrides."""
     overrides = {
@@ -30,7 +29,6 @@ def _build_settings(
             "top_n": top_n,
             "output_dir": output_dir,
             "screening_threshold": threshold,
-            "inject_pdf_dir": inject_pdf_dir,
         }.items()
         if value is not None
     }
@@ -51,9 +49,6 @@ def config() -> None:
     console.print(f"screening_threshold={settings.screening_threshold}")
     console.print(f"top_n={settings.top_n}")
     console.print(f"max_results_per_query={settings.max_results_per_query}")
-    console.print(f"pdf_first_pages={settings.pdf_first_pages}")
-    console.print(f"pdf_last_pages={settings.pdf_last_pages}")
-    console.print(f"inject_pdf_dir={settings.inject_pdf_dir}")
     console.print(f"output_dir={settings.output_dir}")
     console.print(f"s2_api_key_configured={bool(settings.s2_api_key)}")
     console.print(f"llm_api_key_configured={settings.has_llm_api_key}")
@@ -73,19 +68,6 @@ def run(
         bool,
         typer.Option("--overwrite", help="Overwrite existing output directory."),
     ] = False,
-    inject_pdfs: Annotated[
-        Path | None,
-        typer.Option(
-            "--inject-pdfs", help="Directory containing PDFs to inject by paper_id or DOI"
-        ),
-    ] = None,
-    stop_after_screening: Annotated[
-        bool,
-        typer.Option(
-            "--stop-after-screening",
-            help="Stop after screening to review papers needing PDFs before analysis",
-        ),
-    ] = False,
 ) -> None:
     """Run the literature research pipeline."""
     settings = _build_settings(
@@ -93,15 +75,12 @@ def run(
         top_n=top_n,
         output_dir=output_dir,
         threshold=threshold,
-        inject_pdf_dir=str(inject_pdfs) if inject_pdfs is not None else None,
     )
 
     state = run_pipeline(
         questions,
         settings,
         overwrite=overwrite,
-        inject_pdfs_dir=inject_pdfs,
-        stop_after_screening=stop_after_screening,
     )
     if state.screened_papers_completed and not state.analyses:
         console.print(
@@ -121,12 +100,6 @@ def resume(
         int | None,
         typer.Option("--threshold", help="Override the screening threshold."),
     ] = None,
-    inject_pdfs: Annotated[
-        Path | None,
-        typer.Option(
-            "--inject-pdfs", help="Directory containing PDFs to inject by paper_id or DOI"
-        ),
-    ] = None,
 ) -> None:
     """Resume the literature research pipeline from saved state."""
     settings = _build_settings(
@@ -134,10 +107,9 @@ def resume(
         top_n=top_n,
         output_dir=output_dir,
         threshold=threshold,
-        inject_pdf_dir=str(inject_pdfs) if inject_pdfs is not None else None,
     )
 
-    state = run_pipeline([], settings, resume_path=Path(state_file), inject_pdfs_dir=inject_pdfs)
+    state = run_pipeline([], settings, resume_path=Path(state_file))
     console.print(f"[green]Resume complete.[/green] Output: {state.output_dir}")
 
 

@@ -1,6 +1,5 @@
 """Zotero export integration."""
 
-from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -73,9 +72,6 @@ def export_to_zotero(
             if paper.doi:
                 item["DOI"] = paper.doi
 
-            if paper.open_access_pdf_url:
-                item["url"] = paper.open_access_pdf_url
-
             if collection_key:
                 item["collections"] = [collection_key]
 
@@ -90,17 +86,6 @@ def export_to_zotero(
 
             if result.get("successful"):
                 successful += 1
-
-                if paper.pdf_path:
-                    try:
-                        pdf_full_path = Path(paper.pdf_path)
-                        if pdf_full_path.exists():
-                            item_key = list(result["successful"].values())[0]["key"]
-                            zot.attachment_simple([str(pdf_full_path)], item_key)
-                    except Exception as exc:  # noqa: BLE001
-                        console.print(
-                            f"[yellow]Failed to attach PDF for {paper.title}:[/yellow] {exc}"
-                        )
             else:
                 failed.append(f"{paper.title}: {result.get('failed', 'Unknown error')}")
 

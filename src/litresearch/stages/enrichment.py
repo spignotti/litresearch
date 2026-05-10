@@ -19,7 +19,6 @@ ENRICHMENT_FIELDS = [
     "year",
     "citationCount",
     "venue",
-    "openAccessPdf",
     "externalIds",
     "citationStyles",
 ]

@@ -45,7 +45,6 @@ class OpenAlexClient:
                 params={
                     "search": query,
                     "per_page": min(limit, 200),
-                    "filter": "has_pdf:true",
                 },
                 headers=self.headers,
                 timeout=self.timeout,
@@ -72,9 +71,6 @@ class OpenAlexClient:
             if isinstance(doi, str) and doi.startswith("https://doi.org/"):
                 doi = doi[16:]
 
-            oa_info = work.get("open_access", {}) or {}
-            oa_url = oa_info.get("oa_url") if oa_info.get("is_oa") else None
-
             primary_location = work.get("primary_location", {}) or {}
             source = primary_location.get("source", {}) if primary_location else {}
             venue = source.get("display_name") if source else None
@@ -94,7 +90,6 @@ class OpenAlexClient:
                 citation_count=work.get("cited_by_count", 0),
                 venue=venue,
                 doi=doi if isinstance(doi, str) else None,
-                open_access_pdf_url=oa_url,
                 bibtex=None,
                 source="openalex",
             )

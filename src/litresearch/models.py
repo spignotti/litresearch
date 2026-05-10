@@ -27,7 +27,6 @@ class S2PaperLike(Protocol):
     citationCount: int | None
     venue: str | None
     externalIds: dict[str, str] | None
-    openAccessPdf: dict[str, str] | None
     citationStyles: dict[str, str] | None
 
 
@@ -57,26 +56,14 @@ class Paper(BaseModel):
     citation_count: int = 0
     venue: str | None = None
     doi: str | None = None
-    open_access_pdf_url: str | None = None
     bibtex: str | None = None
     source: Literal["s2", "openalex", "both", "citation_expansion"] = "s2"
-    pdf_path: str | None = None
-    pdf_status: Literal["not_attempted", "downloaded", "unavailable", "user_provided"] = (
-        "not_attempted"
-    )
-    data_completeness: Literal["full", "abstract_only", "metadata_only"] = "full"
-
-    @property
-    def pdf_downloaded(self) -> bool:
-        """Backwards-compatible indicator for downloaded or provided PDFs."""
-        return self.pdf_status in {"downloaded", "user_provided"} or self.pdf_path is not None
 
     @classmethod
     def from_s2(cls, s2_paper: S2PaperLike) -> "Paper":
         """Create a normalized paper model from a Semantic Scholar paper object."""
 
         external_ids = s2_paper.externalIds or {}
-        open_access_pdf = s2_paper.openAccessPdf or {}
         citation_styles = s2_paper.citationStyles or {}
         authors = s2_paper.authors or []
 
@@ -90,7 +77,6 @@ class Paper(BaseModel):
             citation_count=s2_paper.citationCount or 0,
             venue=html.unescape(s2_paper.venue) if s2_paper.venue else None,
             doi=external_ids.get("DOI"),
-            open_access_pdf_url=open_access_pdf.get("url"),
             bibtex=citation_styles.get("bibtex"),
             source="s2",
         )
@@ -141,12 +127,10 @@ class RunMetrics(BaseModel):
     total_analyzed: int = 0
     total_exported: int = 0
     citation_expanded: int = 0
+    expansion_queries_generated: int = 0
+    foundational_papers: int = 0
 
     sources: dict[str, int] = Field(default_factory=dict)
-
-    pdfs_downloaded: int = 0
-    pdfs_user_provided: int = 0
-    pdfs_unavailable: int = 0
 
 
 class PipelineState(BaseModel):
@@ -159,7 +143,9 @@ class PipelineState(BaseModel):
     screening_results: list[ScreeningResult] = Field(default_factory=list)
     analyses: list[AnalysisResult] = Field(default_factory=list)
     ranked_paper_ids: list[str] = Field(default_factory=list)
+    foundational_paper_ids: list[str] = Field(default_factory=list)
     screened_papers_completed: bool = False
+    query_expansion_run: bool = False
     current_stage: str
     output_dir: str
     created_at: str
